@@ -7,3 +7,6 @@
 
 - **Name:** Triston
 - **Role:** Designer
+
+- **Name:** Matteo
+- **Role:** Tester
