@@ -1,6 +1,9 @@
 # betterday
 
-## Project owner
+## Project owners
 
 - **Name:** Ryan
 - **Role:** Driver
+
+- **Name:** Triston
+- **Role:** Designer
