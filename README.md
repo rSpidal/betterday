@@ -1,6 +1,6 @@
-# betterday
+# BetterDay
 
-## Project owners
+## Project Owners
 
 - **Name:** Ryan
 - **Role:** Driver
