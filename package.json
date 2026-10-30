@@ -1,0 +1,11 @@
+{
+  "name": "betterday",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A calmer weekly routine, built around your life. Browser-only BetterDay prototype.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "python3 -m http.server 8080 --bind 127.0.0.1"
+  }
+}
