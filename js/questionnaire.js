@@ -1,5 +1,5 @@
 import { DAYS, validateAnswers } from './scheduler.js';
-import { renderTimePicker, bindTimePickers, normalizeDraftParts } from './time-picker.js?v=20261102';
+import { renderTimePicker, bindTimePickers, normalizeDraftParts } from './time-picker.js?v=20261102.2';
 
 const STEPS = ['Your day', 'Commitments', 'Make time', 'Review'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];

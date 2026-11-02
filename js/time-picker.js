@@ -2,6 +2,12 @@
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 let nextPicker = 0;
 
+function minuteOptions(selected) {
+  const minutes = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0'));
+  if (/^[0-5]\d$/.test(selected) && !minutes.includes(selected)) minutes.push(selected);
+  return minutes.sort().map(minute => `<option value="${minute}" ${selected === minute ? 'selected' : ''}>${minute}</option>`).join('') + '<option value="exact">Exact minute…</option>';
+}
+
 export function timeParts(value = '') {
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) && value !== '24:00') {
     return { hour: '', minute: '00', period: 'AM' };
@@ -43,14 +49,15 @@ export function renderTimePicker({ label, value = '', name = '', attributes = ''
   const parts = timeParts(value).hour ? timeParts(value) : normalizeDraftParts(draftParts);
   const canonical = canonicalTime(parts, endOfDay);
   const key = `time-picker-${++nextPicker}`;
-  return `<fieldset class="field time-picker" data-time-picker data-time-pair="${escape(pair)}" data-time-endpoint="${escape(endpoint)}" data-time-automatic="${automatic ? 'true' : 'false'}" data-time-end-of-day="${endOfDay ? 'true' : 'false'}">
+  return `<fieldset class="field time-picker" data-time-picker data-time-minute="${parts.minute}" data-time-pair="${escape(pair)}" data-time-endpoint="${escape(endpoint)}" data-time-automatic="${automatic ? 'true' : 'false'}" data-time-end-of-day="${endOfDay ? 'true' : 'false'}">
     <legend>${escape(label)}</legend>
     <div class="time-picker-controls">
       <label class="time-select"><span class="time-sr-only">${escape(label)} hour</span><select data-time-part="hour" aria-label="${escape(label)} hour" ${required ? 'required' : ''}><option value="" ${!parts.hour ? 'selected' : ''}>Hour</option>${Array.from({ length: 12 }, (_, index) => index + 1).map(hour => `<option value="${hour}" ${parts.hour === String(hour) ? 'selected' : ''}>${hour}</option>`).join('')}</select></label>
       <span class="time-colon" aria-hidden="true">:</span>
-      <label class="time-select"><span class="time-sr-only">${escape(label)} minute</span><select data-time-part="minute" aria-label="${escape(label)} minute">${Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')).map(minute => `<option value="${minute}" ${parts.minute === minute ? 'selected' : ''}>${minute}</option>`).join('')}</select></label>
+      <label class="time-select"><span class="time-sr-only">${escape(label)} minute</span><select data-time-part="minute" aria-label="${escape(label)} minute">${minuteOptions(parts.minute)}</select></label>
       <div class="time-period" role="group" aria-label="${escape(label)} AM or PM">${['AM', 'PM'].map(period => `<label><input type="radio" name="${key}-period" value="${period}" data-time-part="period" ${parts.period === period ? 'checked' : ''} aria-label="${escape(label)} ${period}"><span>${period}</span></label>`).join('')}</div>
     </div>
+    <label class="time-exact" data-time-exact-wrap hidden><span>Exact minute (0–59)</span><input type="number" min="0" max="59" step="1" required disabled data-time-part="exact" aria-label="${escape(label)} exact minute" value="${Number(parts.minute)}"></label>
     <input type="hidden" data-time-value ${name ? `name="${escape(name)}"` : ''} value="${escape(canonical)}" ${attributes}>
     <small class="time-end-note" data-time-midnight ${canonical === '24:00' ? '' : 'hidden'}>Midnight · end of this day</small>
   </fieldset>`;
@@ -67,6 +74,7 @@ export function bindTimePickers(root, { onChange = () => {} } = {}) {
       minute: picker.querySelector('[data-time-part="minute"]').value,
       period: picker.querySelector('[data-time-part="period"]:checked')?.value || 'AM',
     };
+    picker.dataset.timeMinute = parts.minute;
     // Let callers capture partial selection state before their input autosave runs.
     onChange({ input, value: input.value, automatic, picker, parts });
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -74,7 +82,10 @@ export function bindTimePickers(root, { onChange = () => {} } = {}) {
   function setValue(picker, value) {
     const parts = timeParts(value);
     picker.querySelector('[data-time-part="hour"]').value = parts.hour;
-    picker.querySelector('[data-time-part="minute"]').value = parts.minute;
+    const minute = picker.querySelector('[data-time-part="minute"]');
+    minute.innerHTML = minuteOptions(parts.minute);
+    minute.value = parts.minute;
+    picker.querySelector('[data-time-part="exact"]').value = String(Number(parts.minute));
     picker.querySelectorAll('[data-time-part="period"]').forEach(radio => { radio.checked = radio.value === parts.period; });
     picker.querySelector('[data-time-value]').value = value;
     announce(picker, true);
@@ -84,6 +95,33 @@ export function bindTimePickers(root, { onChange = () => {} } = {}) {
     if (!control.matches?.('[data-time-part]')) return;
     const picker = control.closest('[data-time-picker]');
     if (!picker || !root.contains(picker)) return;
+    const minute = picker.querySelector('[data-time-part="minute"]');
+    const exact = picker.querySelector('[data-time-part="exact"]');
+    const exactWrap = picker.querySelector('[data-time-exact-wrap]');
+    if (control === minute && minute.value === 'exact') {
+      minute.value = picker.dataset.timeMinute || '00';
+      exact.value = String(Number(minute.value));
+      exact.setCustomValidity('');
+      exactWrap.hidden = false;
+      exact.disabled = false;
+      exact.focus(); exact.select();
+      return;
+    }
+    if (control === exact) {
+      picker.dataset.timeAutomatic = 'false';
+      if (!/^\d{1,2}$/.test(exact.value) || Number(exact.value) > 59) {
+        exact.setCustomValidity('Enter a minute from 0 to 59.');
+        return;
+      }
+      exact.setCustomValidity('');
+      const selected = String(Number(exact.value)).padStart(2, '0');
+      minute.innerHTML = minuteOptions(selected);
+      minute.value = selected;
+    } else if (control === minute) {
+      exactWrap.hidden = true;
+      exact.disabled = true;
+      exact.setCustomValidity('');
+    }
     picker.dataset.timeAutomatic = 'false';
     const parts = {
       hour: picker.querySelector('[data-time-part="hour"]').value,

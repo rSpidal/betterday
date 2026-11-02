@@ -47,6 +47,12 @@ test('rendered fields preserve existing ends and provide accessible selection co
   assert.match(blank, /<option value="" selected>Hour<\/option>/);
 });
 
+test('minute menus use five-minute steps and retain an existing exact minute', () => {
+  const options = value => [...renderTimePicker({label:'Starts',value}).match(/<select data-time-part="minute"[^>]*>(.*?)<\/select>/s)[1].matchAll(/value="([^"]+)"/g)].map(match=>match[1]);
+  assert.deepEqual(options('09:00'), ['00','05','10','15','20','25','30','35','40','45','50','55','exact']);
+  assert.deepEqual(options('09:52'), ['00','05','10','15','20','25','30','35','40','45','50','52','55','exact']);
+});
+
 test('time labels and canonical field names are escaped', () => {
   const markup = renderTimePicker({ label: '<script>"', name: '" autofocus="true' });
   assert.ok(!markup.includes('<script>'));
@@ -74,19 +80,42 @@ function controlsFixture(value, endpoint, automatic) {
   const radios = ['AM', 'PM'].map(period => ({ value: period, checked: period === parts.period }));
   const input = { value, events: [], dispatchEvent(event) { this.events.push(event); } };
   const note = { hidden: true };
+  const exactWrap = { hidden: true };
+  const exact = { value: String(Number(parts.minute)), disabled: true, focus() {}, select() {}, setCustomValidity(message) { this.validationMessage = message; } };
   const picker = {
-    dataset: { timeEndpoint: endpoint, timePair: 'test', timeAutomatic: String(automatic), timeEndOfDay: String(endpoint === 'end') },
+    dataset: { timeMinute: parts.minute, timeEndpoint: endpoint, timePair: 'test', timeAutomatic: String(automatic), timeEndOfDay: String(endpoint === 'end') },
     querySelector(selector) {
-      return ({ '[data-time-value]': input, '[data-time-midnight]': note, '[data-time-part="hour"]': hour, '[data-time-part="minute"]': minute, '[data-time-part="period"]:checked': radios.find(radio => radio.checked) })[selector];
+      return ({ '[data-time-value]': input, '[data-time-midnight]': note, '[data-time-part="hour"]': hour, '[data-time-part="minute"]': minute, '[data-time-part="exact"]': exact, '[data-time-exact-wrap]': exactWrap, '[data-time-part="period"]:checked': radios.find(radio => radio.checked) })[selector];
     },
     querySelectorAll: () => radios,
   };
-  for (const control of [hour, minute, ...radios]) {
+  for (const control of [hour, minute, exact, ...radios]) {
     control.matches = selector => selector === '[data-time-part]';
     control.closest = () => picker;
   }
-  return { picker, hour, minute, radios, input, note };
+  return { picker, hour, minute, radios, input, note, exact, exactWrap };
 }
+
+test('exact-minute entry preserves suggestions, validates input, and protects a manual end', () => {
+  const start=controlsFixture('11:00','start',false), end=controlsFixture('12:00','end',true);
+  let handler;
+  bindTimePickers({contains:()=>true,querySelectorAll:()=>[start.picker,end.picker],addEventListener:(name,callback)=>{handler=callback;},removeEventListener() {}});
+  start.minute.value='exact';handler({target:start.minute});
+  assert.equal(start.input.value,'11:00');assert.equal(start.input.events.length,0);
+  assert.equal(start.exactWrap.hidden,false);assert.equal(start.exact.disabled,false);
+  start.exact.value='52';handler({target:start.exact});
+  assert.equal(start.input.value,'11:52');assert.equal(end.input.value,'12:52');assert.equal(end.minute.value,'52');
+  assert.match(end.minute.innerHTML,/<option value="52" selected>/);
+  end.minute.value='exact';handler({target:end.minute});
+  assert.equal(end.picker.dataset.timeAutomatic,'true','opening exact entry does not edit the end');
+  end.exact.value='57';handler({target:end.exact});
+  start.minute.value='55';handler({target:start.minute});
+  assert.equal(end.input.value,'12:57');assert.equal(start.exactWrap.hidden,true);assert.equal(start.exact.disabled,true);
+  end.exact.value='60';handler({target:end.exact});
+  assert.equal(end.input.value,'12:57');assert.ok(end.exact.validationMessage);
+  end.minute.value='45';handler({target:end.minute});
+  assert.equal(end.input.value,'12:45');assert.equal(end.exact.validationMessage,'');assert.equal(end.exact.disabled,true);
+});
 
 test('selection events preserve partial PM, suggest across noon, and never overwrite a manual end', () => {
   const start = controlsFixture('', 'start', false), end = controlsFixture('', 'end', true);

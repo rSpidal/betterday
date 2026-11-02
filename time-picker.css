@@ -13,6 +13,7 @@
 .time-period input:checked+span{color:var(--paper);background:var(--green);border-color:var(--green)}
 .time-period input:focus-visible+span{outline:3px solid var(--focus);outline-offset:3px}
 .time-picker .time-end-note{font-size:11px;line-height:1.5;margin-top:6px;display:block;color:var(--muted)}
+.time-exact{display:block;margin-top:8px;font-size:12px}.time-exact span{display:block;margin-bottom:5px}.time-exact input{max-width:140px}
 .time-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @container clock-field (min-width:270px){.time-picker-controls{grid-template-columns:minmax(64px,1fr) 5px minmax(58px,1fr) minmax(108px,1.2fr)}.time-period{grid-column:auto}.time-period span{padding:7px 9px;min-height:38px}}
 @media(max-width:430px){.time-picker select{font-size:16px;padding-left:8px;padding-right:22px}.time-picker .time-select::after{right:8px}.time-picker legend{font-size:13px}.time-picker-controls{gap:4px;grid-template-columns:minmax(52px,1fr) 4px minmax(50px,1fr)}}

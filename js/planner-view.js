@@ -1,7 +1,7 @@
 import * as P from './planner.js?v=20261102';
 import { loadPlanner, savePlanner, saveMigratedPlanner, importPlannerBackup } from './planner-storage.js?v=20261102';
 import { formatTime, toMinutes, DAYS } from './scheduler.js';
-import { renderTimePicker } from './time-picker.js?v=20261102';
+import { renderTimePicker } from './time-picker.js?v=20261102.2';
 import { parseCalendar, exportCalendar, mergeCalendarEvents } from './calendar-exchange.js?v=20261102';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
