@@ -1,0 +1,18 @@
+/* Shared time selection: keep selection and AM/PM visible on every device. */
+.time-picker{min-width:0;border:0;padding:0;margin:0;display:block;container:clock-field / inline-size}
+.time-picker legend{font-size:14px;line-height:1.5;margin-bottom:7px;padding:0;font-weight:550}
+.time-picker-controls{display:grid;grid-template-columns:minmax(64px,1fr) 5px minmax(58px,1fr);gap:6px;align-items:center}
+.time-picker .time-select{position:relative;display:block;min-width:0}
+.time-picker .time-select::after{content:"⌄";position:absolute;right:12px;top:9px;pointer-events:none;color:var(--green);font-size:20px;line-height:24px}
+.time-picker select{appearance:none;-webkit-appearance:none;padding:11px 28px 11px 10px;width:100%;min-width:0;min-height:46px;cursor:pointer;font-size:15px;background:var(--paper);border:1px solid #b8c8b1}
+.time-colon{font-size:18px;text-align:center;color:var(--muted)}
+.time-period{grid-column:1/-1;display:flex;gap:4px;background:var(--sage-light);border:1px solid #c4d1bd;border-radius:9px;padding:3px}
+.time-picker .time-period label{position:relative;display:block;flex:1;cursor:pointer;font-size:13px}
+.time-picker .time-period input{position:absolute;width:1px;min-height:1px;height:1px;opacity:0;inset:0;pointer-events:none}
+.time-period span{display:flex;align-items:center;justify-content:center;min-height:36px;padding:7px 12px;border:1px solid transparent;border-radius:6px;color:var(--green);font-weight:650}
+.time-period input:checked+span{color:var(--paper);background:var(--green);border-color:var(--green)}
+.time-period input:focus-visible+span{outline:3px solid var(--focus);outline-offset:3px}
+.time-picker .time-end-note{font-size:11px;line-height:1.5;margin-top:6px;display:block;color:var(--muted)}
+.time-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@container clock-field (min-width:270px){.time-picker-controls{grid-template-columns:minmax(64px,1fr) 5px minmax(58px,1fr) minmax(108px,1.2fr)}.time-period{grid-column:auto}.time-period span{padding:7px 9px;min-height:38px}}
+@media(max-width:430px){.time-picker select{font-size:16px;padding-left:8px;padding-right:22px}.time-picker .time-select::after{right:8px}.time-picker legend{font-size:13px}.time-picker-controls{gap:4px;grid-template-columns:minmax(52px,1fr) 4px minmax(50px,1fr)}}

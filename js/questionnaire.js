@@ -1,4 +1,5 @@
 import { DAYS, validateAnswers } from './scheduler.js';
+import { renderTimePicker, bindTimePickers, normalizeDraftParts } from './time-picker.js?v=20261102';
 
 const STEPS = ['Your day', 'Commitments', 'Make time', 'Review'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
@@ -16,7 +17,6 @@ const CHALLENGES = [
 const copy = value => JSON.parse(JSON.stringify(value));
 const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const id = () => globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const displayInputTime = value => value === '24:00' ? '00:00' : value || '';
 const displayTime = value => {
   if (!value) return 'Not set';
   const [hour, minute] = value.split(':').map(Number);
@@ -39,6 +39,7 @@ export function mountQuestionnaire(container, {
     commitments: Array.isArray(supplied.commitments) ? supplied.commitments : [],
     activities: Array.isArray(supplied.activities) ? supplied.activities : [],
     challenge: supplied.challenge || '',
+    timeDrafts: Object.fromEntries(Object.entries(supplied.timeDrafts && typeof supplied.timeDrafts === 'object' && !Array.isArray(supplied.timeDrafts) ? supplied.timeDrafts : {}).map(([key, parts]) => [key, { ...normalizeDraftParts(parts), automatic: parts?.automatic === true }])),
   };
   answers.sleep.overrides ||= {};
   let step = Math.max(0, Math.min(3, Math.trunc(Number(initialStep) || 0)));
@@ -49,6 +50,8 @@ export function mountQuestionnaire(container, {
   let saveFailed = false;
   const customDuration = new Set(answers.activities.filter(activity => ![15, 30, 45, 60].includes(Number(activity.duration))).map(activity => activity.id));
   const expandedDays = new Set(answers.activities.filter(activity => activity.days?.length !== 7).map(activity => activity.id));
+  // Restored or explicitly chosen end times belong to the user, never to the default.
+  const manualEnds = new Set(answers.commitments.filter(commitment => commitment.end || answers.timeDrafts[`data-bind="commitment-end" data-id="${escape(commitment.id)}"`]?.automatic === false).map(commitment => commitment.id));
 
   function updateSaveStatus() {
     const indicator = container.querySelector('.save-indicator');
@@ -77,8 +80,8 @@ export function mountQuestionnaire(container, {
   function dayButtons(days, kind, itemId) {
     return `<div class="day-toggles" role="group" aria-label="${kind === 'commitment' ? 'Commitment days' : 'Available days'}">${DAYS.map((day, index) => `<button type="button" class="day-toggle ${days.includes(index) ? 'selected' : ''}" aria-pressed="${days.includes(index)}" aria-label="${day}" data-action="toggle-day" data-kind="${kind}" data-id="${escape(itemId)}" data-day="${index}" data-focus-key="${kind}-${escape(itemId)}-day-${index}">${day.slice(0, 3)}</button>`).join('')}</div>`;
   }
-  function timeField(label, value, attributes) {
-    return `<label class="field"><span>${label}</span><input type="time" value="${escape(displayInputTime(value))}" ${attributes} required></label>`;
+  function timeField(label, value, attributes, options = {}) {
+    return renderTimePicker({ label, value, attributes: `${attributes} data-time-draft-key="${escape(attributes)}"`, draftParts: answers.timeDrafts[attributes], ...options });
   }
   function sleepStep() {
     return `<section class="question-card">
@@ -102,8 +105,8 @@ export function mountQuestionnaire(container, {
         <div class="card-heading"><h3>Commitment ${index + 1}</h3><button type="button" class="text-button danger-text" data-action="remove-commitment" data-id="${escape(commitment.id)}" aria-label="Remove commitment ${index + 1}">Remove</button></div>
         <label class="field"><span>Name</span><input type="text" value="${escape(commitment.title)}" placeholder="e.g. Biology class" maxlength="100" data-bind="commitment-title" data-id="${escape(commitment.id)}" required></label>
         <fieldset class="day-fieldset"><legend>Which days?</legend>${dayButtons(commitment.days || [], 'commitment', commitment.id)}</fieldset>
-        <div class="form-grid">${timeField('Starts', commitment.start, `data-bind="commitment-start" data-id="${escape(commitment.id)}"`)}${timeField('Ends', commitment.end, `data-bind="commitment-end" data-id="${escape(commitment.id)}"`)}</div>
-      </section>`).join('')}</div>` : '<div class="empty-commitments"><span class="empty-symbol" aria-hidden="true">+</span><h3>A little space to start.</h3><p class="muted">Add your regular commitments, or continue if your week is open.</p></div>'}
+        <div class="form-grid">${timeField('Starts', commitment.start, `data-bind="commitment-start" data-id="${escape(commitment.id)}"`, { pair: commitment.id, endpoint: 'start' })}${timeField('Ends', commitment.end, `data-bind="commitment-end" data-id="${escape(commitment.id)}"`, { pair: commitment.id, endpoint: 'end', endOfDay: true, automatic: !manualEnds.has(commitment.id) })}</div>
+      </section>`).join('')}</div>` : '<button type="button" class="empty-commitments" data-action="add-commitment" aria-labelledby="first-commitment-title" aria-describedby="first-commitment-hint"><span class="empty-symbol" aria-hidden="true">+</span><span class="empty-commitments-title" id="first-commitment-title">Add your first commitment.</span><span class="empty-commitments-hint muted" id="first-commitment-hint">Start with a class, work, an appointment, or anything with a fixed time.</span></button>'}
       <button type="button" class="btn btn-secondary" data-action="add-commitment">+ Add a commitment</button>
       ${answers.commitments.length ? '<p class="field-hint">Midnight as an end time means the end of that day. Split overnight commitments into a block on each day.</p>' : '<button type="button" class="text-button skip-commitments" data-action="skip-commitments">I don\'t have any yet →</button>'}
     </section>`;
@@ -143,7 +146,7 @@ export function mountQuestionnaire(container, {
       <section class="review-section">${reviewHeading('Fixed commitments', 1)}${answers.commitments.length ? answers.commitments.map(commitment => `<div class="review-item"><strong>${escape(commitment.title)}</strong><span class="muted">${escape(daysLabel(commitment.days))} · ${displayTime(commitment.start)} – ${displayTime(commitment.end)}</span></div>`).join('') : '<p class="muted">No fixed commitments.</p>'}</section>
       <section class="review-section">${reviewHeading('Time for you', 2)}${answers.activities.map((activity, index) => `<div class="review-item"><strong>${index + 1}. ${escape(activity.title)}</strong><span class="muted">${activity.duration} min · ${activity.frequency}× per week · ${activity.preference === 'any' ? 'No time preference' : escape(activity.preference)}<br>${escape(daysLabel(activity.days))}</span></div>`).join('')}${answers.challenge ? `<div class="review-item"><strong>Your focus</strong><span class="muted">${escape(CHALLENGES.find(challenge => challenge.value === answers.challenge)?.title || '')}</span></div>` : ''}</section>
       <div class="notice">We'll keep your commitments in place and allow 10-minute transitions around suggested activities. Any time left over stays open. If something can't fit, we'll show you.</div>
-      ${hasSchedule ? '<p class="field-hint">Creating this schedule replaces your previous week, including manual event edits.</p>' : ''}
+      ${hasSchedule ? '<p class="field-hint">Saving updates your weekly routine from today. Separately added dated appointments, tasks, and completed history stay in your planner.</p>' : ''}
     </section>`;
   }
   function render(focus) {
@@ -277,8 +280,14 @@ export function mountQuestionnaire(container, {
   container.addEventListener('click', handleClick);
   container.addEventListener('input', handleInput);
   container.addEventListener('submit', handleSubmit);
+  const cleanupTimePickers = bindTimePickers(container, { onChange: ({ input, automatic, parts, value }) => {
+    if (value) delete answers.timeDrafts[input.dataset.timeDraftKey];
+    else answers.timeDrafts[input.dataset.timeDraftKey] = { ...parts, automatic };
+    if (input.dataset.bind === 'commitment-end' && !automatic) manualEnds.add(input.dataset.id);
+  } });
   render();
   return () => {
+    cleanupTimePickers();
     container.removeEventListener('click', handleClick);
     container.removeEventListener('input', handleInput);
     container.removeEventListener('submit', handleSubmit);
