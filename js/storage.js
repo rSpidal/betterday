@@ -1,4 +1,4 @@
-import { toMinutes, validateAnswers } from './scheduler.js';
+import { toMinutes, validateAnswers } from './scheduler.js?v=20261103.3';
 
 export const STORAGE_KEY = 'betterday.v1';
 

@@ -1,4 +1,4 @@
-import { DAYS, validateAnswers } from './scheduler.js';
+import { DAYS, validateAnswers } from './scheduler.js?v=20261103.3';
 import { renderTimePicker, bindTimePickers, normalizeDraftParts } from './time-picker.js?v=20261102.2';
 
 const STEPS = ['Your day', 'Commitments', 'Make time', 'Review'];
@@ -277,6 +277,10 @@ export function mountQuestionnaire(container, {
     const input = event.target;
     const bind = input.dataset.bind;
     if (!bind) return;
+    if (errors.length) {
+      errors = [];
+      container.querySelector('.inline-error')?.remove();
+    }
     const commitment = answers.commitments.find(item => item.id === input.dataset.id);
     const time = commitment?.times.find(item => item.id === input.dataset.slot);
     const activity = answers.activities.find(item => item.id === input.dataset.id);
