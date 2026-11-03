@@ -36,7 +36,7 @@ export function mountQuestionnaire(container, {
   const supplied = copy(draft || {});
   const answers = {
     sleep: { wake: '', bed: '', overrides: {}, ...supplied.sleep },
-    commitments: Array.isArray(supplied.commitments) ? supplied.commitments : [],
+    commitments: Array.isArray(supplied.commitments) ? supplied.commitments.map(commitment => ({ ...commitment, times: Array.isArray(commitment.times) ? commitment.times : [{ id: `time-${commitment.id}`, days: commitment.days || [], start: commitment.start || '', end: commitment.end || '', ...(commitment._plannerMasterIds ? { _plannerMasterIds: commitment._plannerMasterIds } : {}) }] })) : [],
     activities: Array.isArray(supplied.activities) ? supplied.activities : [],
     challenge: supplied.challenge || '',
     timeDrafts: Object.fromEntries(Object.entries(supplied.timeDrafts && typeof supplied.timeDrafts === 'object' && !Array.isArray(supplied.timeDrafts) ? supplied.timeDrafts : {}).map(([key, parts]) => [key, { ...normalizeDraftParts(parts), automatic: parts?.automatic === true }])),
@@ -50,8 +50,9 @@ export function mountQuestionnaire(container, {
   let saveFailed = false;
   const customDuration = new Set(answers.activities.filter(activity => ![15, 30, 45, 60].includes(Number(activity.duration))).map(activity => activity.id));
   const expandedDays = new Set(answers.activities.filter(activity => activity.days?.length !== 7).map(activity => activity.id));
+  const collapsedCommitments = new Set(answers.commitments.filter(commitment => commitment.times.length > 1).map(commitment => commitment.id));
   // Restored or explicitly chosen end times belong to the user, never to the default.
-  const manualEnds = new Set(answers.commitments.filter(commitment => commitment.end || answers.timeDrafts[`data-bind="commitment-end" data-id="${escape(commitment.id)}"`]?.automatic === false).map(commitment => commitment.id));
+  const manualEnds = new Set(answers.commitments.flatMap(commitment => commitment.times.filter(time => time.end || answers.timeDrafts[`data-bind="commitment-end" data-id="${escape(commitment.id)}" data-slot="${escape(time.id)}"`]?.automatic === false).map(time => `${commitment.id}:${time.id}`)));
 
   function updateSaveStatus() {
     const indicator = container.querySelector('.save-indicator');
@@ -68,7 +69,7 @@ export function mountQuestionnaire(container, {
     updateSaveStatus();
   }
   function focusDescriptor(element) {
-    return Object.fromEntries(['focusKey', 'bind', 'action', 'kind', 'id', 'day', 'direction', 'category'].filter(key => element.dataset[key] !== undefined).map(key => [key, element.dataset[key]]));
+    return Object.fromEntries(['focusKey', 'bind', 'action', 'kind', 'id', 'slot', 'day', 'direction', 'category'].filter(key => element.dataset[key] !== undefined).map(key => [key, element.dataset[key]]));
   }
   function restoreFocus(descriptor) {
     if (!descriptor || !Object.keys(descriptor).length) return;
@@ -77,8 +78,8 @@ export function mountQuestionnaire(container, {
     const fallback = descriptor.id ? candidates.find(element => !element.disabled && element.dataset.id === descriptor.id) : null;
     (target || fallback)?.focus({ preventScroll: true });
   }
-  function dayButtons(days, kind, itemId) {
-    return `<div class="day-toggles" role="group" aria-label="${kind === 'commitment' ? 'Commitment days' : 'Available days'}">${DAYS.map((day, index) => `<button type="button" class="day-toggle ${days.includes(index) ? 'selected' : ''}" aria-pressed="${days.includes(index)}" aria-label="${day}" data-action="toggle-day" data-kind="${kind}" data-id="${escape(itemId)}" data-day="${index}" data-focus-key="${kind}-${escape(itemId)}-day-${index}">${day.slice(0, 3)}</button>`).join('')}</div>`;
+  function dayButtons(days, kind, itemId, slotId = '') {
+    return `<div class="day-toggles" role="group" aria-label="${kind === 'commitment-slot' ? 'Days for this commitment time' : 'Available days'}">${DAYS.map((day, index) => `<button type="button" class="day-toggle ${days.includes(index) ? 'selected' : ''}" aria-pressed="${days.includes(index)}" aria-label="${day}" data-action="toggle-day" data-kind="${kind}" data-id="${escape(itemId)}" ${slotId ? `data-slot="${escape(slotId)}"` : ''} data-day="${index}" data-focus-key="${kind}-${escape(itemId)}-${escape(slotId)}-day-${index}">${day.slice(0, 3)}</button>`).join('')}</div>`;
   }
   function timeField(label, value, attributes, options = {}) {
     return renderTimePicker({ label, value, attributes: `${attributes} data-time-draft-key="${escape(attributes)}"`, draftParts: answers.timeDrafts[attributes], ...options });
@@ -97,18 +98,45 @@ export function mountQuestionnaire(container, {
       <div class="notice">Plan around the routine that works for you. You can change these times later.</div>
     </section>`;
   }
+  function commitmentTimeFields(commitment, time, timeIndex, commitmentIndex) {
+    const pair = `${commitment.id}-${time.id}`;
+    const startAttributes = `data-bind="commitment-start" data-id="${escape(commitment.id)}" data-slot="${escape(time.id)}"`;
+    const endAttributes = `data-bind="commitment-end" data-id="${escape(commitment.id)}" data-slot="${escape(time.id)}"`;
+    const removeLabel = `Remove time ${timeIndex + 1} from ${commitment.title || `commitment ${commitmentIndex + 1}`}`;
+    const removeButton = commitment.times.length > 1
+      ? `<button type="button" class="text-button danger-text" data-action="remove-commitment-time" data-id="${escape(commitment.id)}" data-slot="${escape(time.id)}" aria-label="${escape(removeLabel)}">Remove time</button>`
+      : '';
+    return `<section class="commitment-time">
+      <div class="card-heading"><h4>Time ${timeIndex + 1}</h4>${removeButton}</div>
+      <fieldset class="day-fieldset"><legend>Which days?</legend>${dayButtons(time.days || [], 'commitment-slot', commitment.id, time.id)}</fieldset>
+      <div class="form-grid">${timeField('Starts', time.start, startAttributes, { pair, endpoint: 'start' })}${timeField('Ends', time.end, endAttributes, { pair, endpoint: 'end', endOfDay: true, automatic: !manualEnds.has(`${commitment.id}:${time.id}`) })}</div>
+    </section>`;
+  }
+  function commitmentFields(commitment, index) {
+    const collapsed = collapsedCommitments.has(commitment.id);
+    const timesId = `commitment-times-${commitment.id}`;
+    const summary = commitment.times.map(time => `${daysLabel(time.days)} · ${displayTime(time.start)} – ${displayTime(time.end)}`).join('  /  ');
+    const timeFields = commitment.times.map((time, timeIndex) => commitmentTimeFields(commitment, time, timeIndex, index)).join('');
+    return `<section class="commitment-card">
+      <div class="card-heading"><h3>Commitment ${index + 1}</h3><button type="button" class="text-button danger-text" data-action="remove-commitment" data-id="${escape(commitment.id)}" aria-label="Remove commitment ${index + 1}">Remove</button></div>
+      <label class="field"><span>Name</span><input type="text" value="${escape(commitment.title)}" placeholder="e.g. Biology class" maxlength="100" data-bind="commitment-title" data-id="${escape(commitment.id)}" required></label>
+      <button type="button" class="commitment-times-toggle" data-action="toggle-commitment-times" data-id="${escape(commitment.id)}" aria-expanded="${!collapsed}" aria-controls="${escape(timesId)}" aria-label="${collapsed ? 'Open' : 'Close'} weekly times for ${escape(commitment.title || `commitment ${index + 1}`)}"><span class="commitment-times-toggle-label">Weekly times · ${commitment.times.length} ${commitment.times.length === 1 ? 'entry' : 'entries'}</span><span class="commitment-times-summary">${escape(summary)}</span><span class="commitment-times-toggle-icon" aria-hidden="true">⌄</span></button>
+      <div class="commitment-times" id="${escape(timesId)}" ${collapsed ? 'hidden' : ''}>${timeFields}<button type="button" class="text-button add-commitment-time" data-action="add-commitment-time" data-id="${escape(commitment.id)}">+ Add another day and time</button></div>
+    </section>`;
+  }
   function commitmentsStep() {
+    const commitmentList = answers.commitments.length
+      ? `<div class="commitment-list">${answers.commitments.map(commitmentFields).join('')}</div>`
+      : '<button type="button" class="empty-commitments" data-action="add-commitment" aria-labelledby="first-commitment-title" aria-describedby="first-commitment-hint"><span class="empty-symbol" aria-hidden="true">+</span><span class="empty-commitments-title" id="first-commitment-title">Add your first commitment.</span><span class="empty-commitments-hint muted" id="first-commitment-hint">Start with a class, work, an appointment, or anything with a fixed time.</span></button>';
+    const commitmentHint = answers.commitments.length
+      ? '<p class="field-hint">Each day and time entry repeats weekly. Midnight as an end time means the end of that day; split overnight commitments into blocks on each day.</p>'
+      : '<button type="button" class="text-button skip-commitments" data-action="skip-commitments">I have no commitments yet →</button>';
     return `<section class="question-card">
       <p class="eyebrow">02 / YOUR REAL LIFE</p><h2>What's already on your calendar?</h2>
-      <p class="muted">Classes, work, appointments, and anything else that has a fixed time. Include travel in the block or add it separately.</p>
-      ${answers.commitments.length ? `<div class="commitment-list">${answers.commitments.map((commitment, index) => `<section class="commitment-card">
-        <div class="card-heading"><h3>Commitment ${index + 1}</h3><button type="button" class="text-button danger-text" data-action="remove-commitment" data-id="${escape(commitment.id)}" aria-label="Remove commitment ${index + 1}">Remove</button></div>
-        <label class="field"><span>Name</span><input type="text" value="${escape(commitment.title)}" placeholder="e.g. Biology class" maxlength="100" data-bind="commitment-title" data-id="${escape(commitment.id)}" required></label>
-        <fieldset class="day-fieldset"><legend>Which days?</legend>${dayButtons(commitment.days || [], 'commitment', commitment.id)}</fieldset>
-        <div class="form-grid">${timeField('Starts', commitment.start, `data-bind="commitment-start" data-id="${escape(commitment.id)}"`, { pair: commitment.id, endpoint: 'start' })}${timeField('Ends', commitment.end, `data-bind="commitment-end" data-id="${escape(commitment.id)}"`, { pair: commitment.id, endpoint: 'end', endOfDay: true, automatic: !manualEnds.has(commitment.id) })}</div>
-      </section>`).join('')}</div>` : '<button type="button" class="empty-commitments" data-action="add-commitment" aria-labelledby="first-commitment-title" aria-describedby="first-commitment-hint"><span class="empty-symbol" aria-hidden="true">+</span><span class="empty-commitments-title" id="first-commitment-title">Add your first commitment.</span><span class="empty-commitments-hint muted" id="first-commitment-hint">Start with a class, work, an appointment, or anything with a fixed time.</span></button>'}
+      <p class="muted">Classes, work, appointments, and anything else that has a fixed time. Add a separate day and time entry when one commitment varies across the week.</p>
+      ${commitmentList}
       <button type="button" class="btn btn-secondary" data-action="add-commitment">+ Add a commitment</button>
-      ${answers.commitments.length ? '<p class="field-hint">Midnight as an end time means the end of that day. Split overnight commitments into a block on each day.</p>' : '<button type="button" class="text-button skip-commitments" data-action="skip-commitments">I don\'t have any yet →</button>'}
+      ${commitmentHint}
     </section>`;
   }
   function activityFields(activity, index) {
@@ -143,7 +171,7 @@ export function mountQuestionnaire(container, {
     const reviewHeading = (title, target) => `<div class="card-heading"><h3>${title}</h3><button type="button" class="text-button" data-action="goto" data-step="${target}" aria-label="Edit ${title.toLowerCase()}">Edit</button></div>`;
     return `<section class="question-card"><p class="eyebrow">04 / YOUR WEEK, YOUR WAY</p><h2>Does this look right?</h2><p class="muted">A little structure, with room for real life. Take a look before we put your week together.</p>
       <section class="review-section">${reviewHeading('Your daily rhythm', 0)}<div class="review-row"><span>Usual day</span><strong>${displayTime(answers.sleep.wake)} – ${displayTime(answers.sleep.bed)}</strong></div>${Object.entries(answers.sleep.overrides).map(([day, times]) => `<div class="review-row"><span>${DAYS[Number(day)]}</span><strong>${displayTime(times.wake)} – ${displayTime(times.bed)}</strong></div>`).join('')}</section>
-      <section class="review-section">${reviewHeading('Fixed commitments', 1)}${answers.commitments.length ? answers.commitments.map(commitment => `<div class="review-item"><strong>${escape(commitment.title)}</strong><span class="muted">${escape(daysLabel(commitment.days))} · ${displayTime(commitment.start)} – ${displayTime(commitment.end)}</span></div>`).join('') : '<p class="muted">No fixed commitments.</p>'}</section>
+      <section class="review-section">${reviewHeading('Fixed commitments', 1)}${answers.commitments.length ? answers.commitments.map(commitment => `<div class="review-item"><strong>${escape(commitment.title)}</strong><span class="muted">${commitment.times.map(time => `${escape(daysLabel(time.days))} · ${displayTime(time.start)} – ${displayTime(time.end)}`).join('<br>')}</span></div>`).join('') : '<p class="muted">No fixed commitments.</p>'}</section>
       <section class="review-section">${reviewHeading('Time for you', 2)}${answers.activities.map((activity, index) => `<div class="review-item"><strong>${index + 1}. ${escape(activity.title)}</strong><span class="muted">${activity.duration} min · ${activity.frequency}× per week · ${activity.preference === 'any' ? 'No time preference' : escape(activity.preference)}<br>${escape(daysLabel(activity.days))}</span></div>`).join('')}${answers.challenge ? `<div class="review-item"><strong>Your focus</strong><span class="muted">${escape(CHALLENGES.find(challenge => challenge.value === answers.challenge)?.title || '')}</span></div>` : ''}</section>
       <div class="notice">We'll keep your commitments in place and allow 10-minute transitions around suggested activities. Any time left over stays open. If something can't fit, we'll show you.</div>
       ${hasSchedule ? '<p class="field-hint">Saving updates your weekly routine from today. Separately added dated appointments, tasks, and completed history stay in your planner.</p>' : ''}
@@ -194,14 +222,30 @@ export function mountQuestionnaire(container, {
       showDayOverrides = !showDayOverrides;
       if (!showDayOverrides) answers.sleep.overrides = {};
     } else if (action === 'add-commitment') {
-      answers.commitments.push({ id: id(), title: '', days: [], start: '', end: '' });
+      answers.commitments.push({ id: id(), title: '', times: [{ id: id(), days: [], start: '', end: '' }] });
     } else if (action === 'remove-commitment') {
       answers.commitments = answers.commitments.filter(commitment => commitment.id !== button.dataset.id);
+      collapsedCommitments.delete(button.dataset.id);
+    } else if (action === 'toggle-commitment-times') {
+      if (collapsedCommitments.has(button.dataset.id)) collapsedCommitments.delete(button.dataset.id);
+      else collapsedCommitments.add(button.dataset.id);
+    } else if (action === 'add-commitment-time') {
+      const commitment = answers.commitments.find(item => item.id === button.dataset.id);
+      commitment.times.push({ id: id(), days: [], start: '', end: '' });
+    } else if (action === 'remove-commitment-time') {
+      const commitment = answers.commitments.find(item => item.id === button.dataset.id);
+      if (commitment.times.length > 1) commitment.times = commitment.times.filter(time => time.id !== button.dataset.slot);
+      if (commitment.times.length <= 1) collapsedCommitments.delete(button.dataset.id);
     } else if (action === 'toggle-day') {
-      const list = button.dataset.kind === 'activity' ? answers.activities : answers.commitments;
-      const item = list.find(candidate => candidate.id === button.dataset.id);
       const day = Number(button.dataset.day);
-      item.days = item.days.includes(day) ? item.days.filter(value => value !== day) : [...item.days, day].sort((a, b) => a - b);
+      if (button.dataset.kind === 'commitment-slot') {
+        const commitment = answers.commitments.find(candidate => candidate.id === button.dataset.id);
+        const time = commitment.times.find(candidate => candidate.id === button.dataset.slot);
+        time.days = time.days.includes(day) ? time.days.filter(value => value !== day) : [...time.days, day].sort((a, b) => a - b);
+      } else {
+        const activity = answers.activities.find(candidate => candidate.id === button.dataset.id);
+        activity.days = activity.days.includes(day) ? activity.days.filter(value => value !== day) : [...activity.days, day].sort((a, b) => a - b);
+      }
     } else if (action === 'select-activity') {
       const option = ACTIVITY_OPTIONS.find(candidate => candidate.category === button.dataset.category);
       const existing = answers.activities.find(activity => activity.category === option.category);
@@ -223,6 +267,8 @@ export function mountQuestionnaire(container, {
     persist();
     render(focusDescriptor(button));
     if (action === 'add-commitment') container.querySelector('.commitment-card:last-child input')?.focus();
+    if (action === 'add-commitment-time') container.querySelector('.commitment-time:last-child .day-toggle')?.focus();
+    if (action === 'remove-commitment-time') container.querySelector(`[data-action="toggle-day"][data-id="${button.dataset.id}"]`)?.focus({ preventScroll: true });
     if (action === 'custom-activity') container.querySelector('.activity-card:last-child input')?.focus();
     if (action === 'remove-commitment') container.querySelector('[data-action="add-commitment"]')?.focus({ preventScroll: true });
     if (action === 'remove-activity') container.querySelector('[data-action="custom-activity"]:not(:disabled)')?.focus({ preventScroll: true });
@@ -232,6 +278,7 @@ export function mountQuestionnaire(container, {
     const bind = input.dataset.bind;
     if (!bind) return;
     const commitment = answers.commitments.find(item => item.id === input.dataset.id);
+    const time = commitment?.times.find(item => item.id === input.dataset.slot);
     const activity = answers.activities.find(item => item.id === input.dataset.id);
     let redraw = false;
     if (bind === 'sleep-wake') answers.sleep.wake = input.value;
@@ -244,9 +291,9 @@ export function mountQuestionnaire(container, {
     else if (bind === 'override-bed') answers.sleep.overrides[input.dataset.day].bed = input.value;
     else if (bind === 'commitment-title') commitment.title = input.value;
     else if (bind === 'commitment-start') {
-      commitment.start = input.value;
-      if (commitment.end === '00:00' && input.value > '00:00') commitment.end = '24:00';
-    } else if (bind === 'commitment-end') commitment.end = input.value === '00:00' && commitment.start > '00:00' ? '24:00' : input.value;
+      time.start = input.value;
+      if (time.end === '00:00' && input.value > '00:00') time.end = '24:00';
+    } else if (bind === 'commitment-end') time.end = input.value === '00:00' && time.start > '00:00' ? '24:00' : input.value;
     else if (bind === 'activity-title') activity.title = input.value;
     else if (bind === 'activity-duration') {
       if (input.value === 'other') customDuration.add(activity.id);
@@ -283,7 +330,7 @@ export function mountQuestionnaire(container, {
   const cleanupTimePickers = bindTimePickers(container, { onChange: ({ input, automatic, parts, value }) => {
     if (value) delete answers.timeDrafts[input.dataset.timeDraftKey];
     else answers.timeDrafts[input.dataset.timeDraftKey] = { ...parts, automatic };
-    if (input.dataset.bind === 'commitment-end' && !automatic) manualEnds.add(input.dataset.id);
+    if (input.dataset.bind === 'commitment-end' && !automatic) manualEnds.add(`${input.dataset.id}:${input.dataset.slot}`);
   } });
   render();
   return () => {

@@ -105,7 +105,7 @@ function validateEvent(event) {
     && ['fixed', 'session'].includes(event.kind) && (event.taskId === null || typeof event.taskId === 'string') && typeof event.locked === 'boolean'
     && recurrenceValid(event.recurrence, event.date) && Array.isArray(event.excludedDates) && event.excludedDates.every(isDate)
     && (event.allDay === undefined || typeof event.allDay === 'boolean')
-    && ['sourceUid','sourceOccurrence','importKey','routineMasterId'].every(key => event[key] === undefined || typeof event[key] === 'string')
+    && ['sourceUid','sourceOccurrence','importKey','routineMasterId','routineGroupId'].every(key => event[key] === undefined || typeof event[key] === 'string')
     && (event.routineSourceIds === undefined || (Array.isArray(event.routineSourceIds) && event.routineSourceIds.every(id => typeof id === 'string' && !!id)));
 }
 export function assertPlanner(state, checkUndo = true) {
@@ -501,7 +501,10 @@ export function migrateLegacy(legacy, { startDate, timeZone = Intl.DateTimeForma
     const event = { id: `legacy-${old.id}`, title: old.title, date, start: old.start, end: old.end, kind: old.type === 'commitment' ? 'fixed' : 'session', taskId: null, locked: old.type === 'commitment', recurrence, excludedDates: [] };
     if (old.type === 'commitment') {
       const commitment = legacy.answers.commitments.find(item => item.id === old.sourceId);
-      if (Array.isArray(commitment?._plannerMasterIds)) event.routineSourceIds = copy(commitment._plannerMasterIds);
+      const time = (Array.isArray(commitment?.times) ? commitment.times : [commitment]).find(item => item && item.start === old.start && item.end === old.end && item.days?.includes(old.day));
+      event.routineGroupId = old.sourceId || old.id;
+      const masterIds = time?._plannerMasterIds || commitment?._plannerMasterIds;
+      if (Array.isArray(masterIds)) event.routineSourceIds = copy(masterIds);
     }
     if (old.type !== 'commitment') {
       const activity = legacy.answers.activities.find(item => item.id === old.sourceId);
@@ -556,14 +559,21 @@ export function replaceRoutine(state, legacy, { startDate = todayInZone(state.ti
 /** Current migrated fixed series, suitable for the questionnaire's keep-commitments option. */
 export function routineCommitments(state, { date = todayInZone(state.timeZone) } = {}) {
   const groups = new Map();
-  for(const event of state.events) {
-    if(event.kind !== 'fixed' || !event.id.startsWith('legacy-') || !event.recurrence || (event.recurrence.until && event.recurrence.until < date)) continue;
-    const key = JSON.stringify([event.title,event.start,event.end]);
-    if(!groups.has(key)) groups.set(key,{ id:`routine-${event.id}`, title:event.title, start:event.start, end:event.end, days:[], _plannerMasterIds:[] });
-    const group=groups.get(key);
-    const days=event.recurrence.frequency === 'daily' ? [0,1,2,3,4,5,6] : event.recurrence.days || [weekday(event.date)];
-    group.days=[...new Set([...group.days,...days])].sort((a,b)=>a-b);
-    group._plannerMasterIds.push(event.id);
+  for (const event of state.events) {
+    if (event.kind !== 'fixed' || !event.id.startsWith('legacy-') || !event.recurrence || (event.recurrence.until && event.recurrence.until < date)) continue;
+    const legacyId = event.id.match(/^legacy-commitment-(.+)-[0-6]$/)?.[1];
+    const groupId = event.routineGroupId || legacyId || event.title;
+    const key = JSON.stringify([groupId, event.title]);
+    if (!groups.has(key)) groups.set(key, { id: `routine-${groupId}`, title: event.title, times: [] });
+    const group = groups.get(key);
+    let time = group.times.find(item => item.start === event.start && item.end === event.end);
+    if (!time) {
+      time = { id: `routine-time-${event.start.replace(':', '')}-${event.end.replace(':', '')}`, start: event.start, end: event.end, days: [], _plannerMasterIds: [] };
+      group.times.push(time);
+    }
+    const days = event.recurrence.frequency === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : event.recurrence.days || [weekday(event.date)];
+    time.days = [...new Set([...time.days, ...days])].sort((a, b) => a - b);
+    time._plannerMasterIds.push(event.id);
   }
   return [...groups.values()];
 }

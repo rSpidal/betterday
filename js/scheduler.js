@@ -34,6 +34,8 @@ function validDays(days) {
     && new Set(days).size === days.length;
 }
 
+function commitmentTimes(entry) { return Array.isArray(entry?.times) ? entry.times : [entry]; }
+
 function sleepFor(answers, day) {
   return answers?.sleep?.overrides?.[day] || answers?.sleep;
 }
@@ -90,22 +92,25 @@ export function validateAnswers(answers) {
       const title = typeof entry?.title === 'string' ? entry.title.trim() : '';
       const label = title || `Commitment ${index + 1}`;
       if (!title) errors.push({ step: 1, message: `Give commitment ${index + 1} a name.` });
-      if (!validDays(entry?.days)) errors.push({ step: 1, message: `Choose at least one day for ${label}.` });
-      const start = toMinutes(entry?.start);
-      const end = toMinutes(entry?.end);
-      const error = intervalError(start, end);
-      if (error) errors.push({ step: 1, message: `${label}: ${error}` });
-      if (!validDays(entry?.days) || error) return;
-      entry.days.forEach(day => {
-        if (validSleep(sleepFor(answers, day)) && !withinAwake(start, end, answers, day)) {
-          errors.push({ step: 1, message: `${label} falls during your sleep time on ${DAYS[day]}. Adjust the commitment or your sleep times.` });
-        }
-        occupied[day].forEach(other => {
-          if (start < other.end && end > other.start) {
-            errors.push({ step: 1, message: `${label} overlaps ${other.title} on ${DAYS[day]}. Adjust one of these commitments.` });
+      commitmentTimes(entry).forEach((time, timeIndex) => {
+        const timeLabel = commitmentTimes(entry).length > 1 ? `${label} (time ${timeIndex + 1})` : label;
+        const start = toMinutes(time?.start);
+        const end = toMinutes(time?.end);
+        const error = intervalError(start, end);
+        if (!validDays(time?.days)) errors.push({ step: 1, message: `Choose at least one day for ${timeLabel}.` });
+        if (error) errors.push({ step: 1, message: `${timeLabel}: ${error}` });
+        if (!validDays(time?.days) || error) return;
+        time.days.forEach(day => {
+          if (validSleep(sleepFor(answers, day)) && !withinAwake(start, end, answers, day)) {
+            errors.push({ step: 1, message: `${timeLabel} falls during your sleep time on ${DAYS[day]}. Adjust the commitment or your sleep times.` });
           }
+          occupied[day].forEach(other => {
+            if (start < other.end && end > other.start) {
+              errors.push({ step: 1, message: `${timeLabel} overlaps ${other.title} on ${DAYS[day]}. Adjust one of these commitments.` });
+            }
+          });
+          occupied[day].push({ title: label, start, end });
         });
-        occupied[day].push({ title: label, start, end });
       });
     });
   }
@@ -166,11 +171,11 @@ export function generateSchedule(answers) {
   const unplaced = [];
   const notes = [];
   answers.commitments.forEach((entry, index) => {
-    entry.days.forEach(day => events.push({
-      id: `commitment-${entry.id || index}-${day}`,
-      title: entry.title.trim(), day, start: entry.start, end: entry.end,
+    commitmentTimes(entry).forEach((time, timeIndex) => time.days.forEach(day => events.push({
+      id: `commitment-${entry.id || index}-${timeIndex ? `${time.id || timeIndex}-` : ''}${day}`,
+      title: entry.title.trim(), day, start: time.start, end: time.end,
       type: 'commitment', category: 'commitment', sourceId: entry.id || String(index), preferred: true,
-    }));
+    })));
   });
 
   answers.activities.forEach((activity, activityIndex) => {
