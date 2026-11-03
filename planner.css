@@ -11,3 +11,27 @@ dialog.planner-dialog-wide{max-width:730px}.planner-dialog-wide .dialog-inner{pa
 @media(max-width:900px){.planner-layout{grid-template-columns:1fr}.task-list{max-height:none}.dated-week{grid-template-columns:repeat(7,minmax(115px,1fr))}.planner-layout .task-panel{max-width:none}.planner-footer{align-items:flex-start;flex-direction:column;gap:8px}}
 @media(max-width:600px){.planner-page .page-top h1{font-size:38px}.now-card{display:block;padding:22px}.now-actions{flex-direction:row;flex-wrap:wrap;margin-top:20px}.now-actions .btn{padding:12px 14px;font-size:12px}.now-card h2{font-size:26px}.planner-datebar{gap:14px}.planner-tools{width:100%}.planner-tools .btn{flex:1;padding:9px 7px;font-size:10px}.date-controls{gap:8px;width:100%}.date-controls input{flex:1;min-width:0;max-width:220px}.dated-agenda{padding:6px 12px}.calendar-toolbar small{max-width:200px;line-height:1.6}.planner-dialog-wide .dialog-inner{padding:23px}.plan-change>div{grid-template-columns:1fr 16px 1fr;gap:7px;font-size:11px}.planner-setup{margin:35px auto}.planner-setup h1{font-size:40px}.planner-setup form{padding:22px}.planner-footer>div{flex-wrap:wrap}.planner-page .top-actions .btn{flex:1}.task-panel-heading{padding-top:20px}}
 @media(max-width:400px){.dialog-inner .form-grid{grid-template-columns:1fr}}
+
+/* A time-scaled week grid keeps each appointment at its actual hour. */
+.dated-week-scroll{overflow:auto;max-height:720px;border-top:1px solid var(--line)}
+.dated-week{display:block;min-width:900px;min-height:0;overflow:visible}
+.week-head,.week-body{display:grid;grid-template-columns:56px repeat(7,minmax(112px,1fr))}
+.week-head{position:sticky;top:0;z-index:4;background:var(--paper);border-bottom:1px solid var(--line)}
+.week-time-head{padding:16px 4px;color:var(--muted);font-size:10px;text-align:center}
+.week-head-cell{min-width:0;border-left:1px solid var(--line);text-align:center}
+.week-head-cell.selected{background:#f4f7ee}
+.week-date{width:100%;border:0;background:transparent;padding:16px 2px;color:var(--muted);font-size:11px;white-space:nowrap}
+.week-head-cell.selected .week-date{color:var(--green);font-weight:700}
+.week-body{position:relative;min-width:0}
+.week-time-axis{position:relative;border-right:1px solid var(--line);background:var(--paper)}
+.week-hour-label{position:absolute;right:5px;transform:translateY(-50%);color:var(--muted);font-size:9px;white-space:nowrap}
+.week-hour-label:first-child{transform:none}
+.week-hour-label:last-child{transform:translateY(-100%)}
+.week-column{position:relative;box-sizing:border-box;min-width:0;padding:0;border-right:1px solid var(--line);background-color:var(--paper);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 59px,var(--line) 59px,var(--line) 60px)}
+.week-column.selected{background-color:#f4f7ee}
+.week-event{position:absolute;z-index:1;left:3px;right:3px;width:calc(100% - 6px);box-sizing:border-box;overflow:hidden;margin:0;padding:3px 5px;border:1px solid #dce7d2;border-radius:5px;background:#e8f0e1;color:var(--ink);text-align:left}
+.week-event.fixed{background:#f0f0e5;border-color:#e1e1cc}
+.week-event span,.week-event small{display:block;color:var(--muted);font-size:9px;line-height:1.15}
+.week-event strong{display:block;overflow:hidden;margin:2px 0 0;font-size:10px;line-height:1.15;overflow-wrap:anywhere}
+.week-event .conflict-label{font-size:8px}
+.planner-layout:has(.dated-week-scroll){grid-template-columns:minmax(0,1fr)}
