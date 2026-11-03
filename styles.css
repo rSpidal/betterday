@@ -25,3 +25,44 @@ dialog{border:1px solid var(--line);background:var(--paper);color:var(--ink);bor
 @media(max-width:760px){.wizard-header{display:block}.save-indicator{display:block;margin-top:15px}.stepper-item button{gap:5px;font-size:10px}.step-number{width:18px;height:18px;font-size:9px}.day-override{flex-wrap:wrap;gap:8px}.day-override .form-grid{flex-basis:100%;max-width:none}.review-item{display:block}.review-item>span{display:block;text-align:left;margin-top:4px}.choice strong{font-size:12px}.step-caption{display:none}}
 @media(max-width:430px){.challenge-choices{grid-template-columns:1fr}.skip-commitments{display:block;margin:18px 0 0}.activity-controls{gap:3px!important}.card-heading{gap:7px}.activity-card .card-heading h3{font-size:13px}.choice-grid .choice{padding:14px}.stepper-item button{align-items:flex-start;flex-direction:column;gap:6px}}
 .btn{border-radius:8px}.art-caption{left:0;right:0;text-align:center}
+
+
+/* Dark green color scheme */
+:root[data-theme="dark"]{color-scheme:dark;--cream:#101b15;--paper:#17251c;--green:#89b996;--green-dark:#a0c8a8;--sage:#263d2d;--sage-light:#1d3023;--ink:#e3ece4;--muted:#aab9ad;--line:#34483a;--focus:#9bd2a6;--shadow:0 20px 65px #0008}
+:root[data-theme="dark"] input,:root[data-theme="dark"] select,:root[data-theme="dark"] textarea{border-color:var(--line)}
+:root[data-theme="dark"] .nav-cta{border-color:#506b56;color:var(--green)}
+:root[data-theme="dark"] .hero-art{background:#1e3424}
+:root[data-theme="dark"] .hero-art:before,:root[data-theme="dark"] .hero-art:after{border-color:#3b5940}
+:root[data-theme="dark"] .preview-top{background:#244331;color:#f3f7f1}
+:root[data-theme="dark"] .preview-top small{color:#c3d9c4}
+:root[data-theme="dark"] .preview-days{border-color:var(--line)}
+:root[data-theme="dark"] .preview-event{border-color:#26382b}
+:root[data-theme="dark"] .preview-event>div{background:#273b2c;border-color:#80a786}
+:root[data-theme="dark"] .preview-event:nth-of-type(2n)>div{background:#343b29;border-color:#a2a878}
+:root[data-theme="dark"] .home-bottom{border-color:var(--line)}
+:root[data-theme="dark"] .commitment-card,:root[data-theme="dark"] .activity-card{background:#1b2a20}
+:root[data-theme="dark"] .view-toggle{background:#1e2b21}
+:root[data-theme="dark"] .view-toggle button.active{background:var(--paper)}
+:root[data-theme="dark"] .week-head>div.today{background:#253a2a}
+:root[data-theme="dark"] .calendar-day{background-image:linear-gradient(to bottom,#2b3a2d 1px,transparent 1px)}
+:root[data-theme="dark"] .cal-event{background:#2c4631;color:#e0eee0;border-color:#83ab83}
+:root[data-theme="dark"] .cal-event.type-commitment{background:#3a3d2b;color:#e8e9d6;border-color:#a8ad75}
+:root[data-theme="dark"] .cal-event.category-rest{background:#3b303c;color:#eaddeb;border-color:#b39bb1}
+:root[data-theme="dark"] .cal-event.category-hobby,:root[data-theme="dark"] .cal-event.category-custom{background:#263b3b;color:#d5e8e6;border-color:#8ba9a8}
+:root[data-theme="dark"] .cal-event.category-movement{background:#29402c;color:#dcebdd;border-color:#77a176}
+:root[data-theme="dark"] .sleep-shade{background:repeating-linear-gradient(135deg,#1a261d,#1a261d 5px,#202e23 5px,#202e23 6px)}
+:root[data-theme="dark"] .btn-danger{background:#3a2723;color:#f0b5a8;border-color:#70463d}
+:root[data-theme="dark"] .notice{background:#1d3023}
+:root[data-theme="dark"] .brand-mark path{stroke:var(--ink)}
+:root[data-theme="dark"] .now-card{background:linear-gradient(110deg,#1b3021,#202f23);border-color:var(--line)}
+:root[data-theme="dark"] .week-column.selected{background:#1d3023}
+:root[data-theme="dark"] .week-event{background:#273c2b;border-color:#3a5540}
+:root[data-theme="dark"] .week-event.fixed{background:#343728;border-color:#4a4c34}
+:root[data-theme="dark"] .complete-task{border-color:#506b56}
+:root[data-theme="dark"] .unplaced-preview{background:#332e23;border-color:#514735}
+:root[data-theme="dark"] .time-picker select{border-color:var(--line)}
+:root[data-theme="dark"] .time-period{border-color:var(--line)}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);font-size:12px}
+.theme-toggle:hover{background:var(--sage-light)}
+.theme-toggle>span:first-child{font-size:16px;line-height:1}
+@media(max-width:760px){.theme-toggle-label{display:none}.theme-toggle{width:36px;padding:6px}}

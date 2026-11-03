@@ -67,7 +67,8 @@ function scheduleStatus() {
 function header(route) {
   const { hasSchedule, needsRecovery } = scheduleStatus();
   const openPlanner = hasSchedule || needsRecovery;
-  $('#main-nav').innerHTML = `<a href="#home" ${route === 'home' ? 'aria-current="page"' : ''}>Home</a><a class="nav-questionnaire" href="#questionnaire" data-action="app-questionnaire" ${route === 'questionnaire' ? 'aria-current="page"' : ''}>${state.draft ? 'Continue setup' : 'Questionnaire'}</a><a class="nav-cta" href="${openPlanner ? '#schedule' : '#questionnaire'}" ${!openPlanner ? 'data-action="app-questionnaire"' : ''} ${route === 'schedule' ? 'aria-current="page"' : ''}>${needsRecovery ? 'Recover planner' : hasSchedule ? 'My schedule' : 'Get started'}</a>`;
+  const darkTheme = localStorage.getItem('betterday-theme') === 'dark';
+  $('#main-nav').innerHTML = `<a href="#home" ${route === 'home' ? 'aria-current="page"' : ''}>Home</a><a class="nav-questionnaire" href="#questionnaire" data-action="app-questionnaire" ${route === 'questionnaire' ? 'aria-current="page"' : ''}>${state.draft ? 'Continue setup' : 'Questionnaire'}</a><a class="nav-cta" href="${openPlanner ? '#schedule' : '#questionnaire'}" ${!openPlanner ? 'data-action="app-questionnaire"' : ''} ${route === 'schedule' ? 'aria-current="page"' : ''}>${needsRecovery ? 'Recover planner' : hasSchedule ? 'My schedule' : 'Get started'}</a><button class="theme-toggle" type="button" data-action="app-theme-toggle" aria-pressed="${darkTheme}" aria-label="Switch to ${darkTheme ? 'light' : 'dark'} color scheme"><span aria-hidden="true">${darkTheme ? '☀' : '☾'}</span><span class="theme-toggle-label">${darkTheme ? 'Light' : 'Dark'} mode</span></button>`;
 }
 function primaryCTA(extra = '') {
   const { hasSchedule, needsRecovery } = scheduleStatus();
@@ -153,6 +154,13 @@ function renderSchedule() {
     onChange: () => header(routeName()),
   });
 }
+function applyTheme(theme) {
+  const darkTheme = theme === 'dark';
+  document.documentElement.dataset.theme = darkTheme ? 'dark' : 'light';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', darkTheme ? '#101b15' : '#f7f7ef');
+}
+applyTheme(localStorage.getItem('betterday-theme') || 'light');
+
 function render() {
   if (dialog.open) dialog.close();
   dialog.classList.remove('planner-dialog-wide');
@@ -189,7 +197,12 @@ document.addEventListener('click', event => {
   const action = button.dataset.action;
   if (!action?.startsWith('app-')) return;
   event.preventDefault();
-  if (action === 'app-questionnaire') openQuestionnaire();
+  if (action === 'app-theme-toggle') {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('betterday-theme', theme);
+    applyTheme(theme);
+    header(routeName());
+  } else if (action === 'app-questionnaire') openQuestionnaire();
   else if (action === 'app-how') $('#how-it-works')?.scrollIntoView({ behavior: 'smooth' });
   else if (action === 'app-retake') retakeDialog();
   else if (action === 'app-start-fresh') retakeDialog(true);
