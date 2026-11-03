@@ -188,8 +188,7 @@ function retakeDialog(force = false) {
   if (state.draft && !force) return navigate('questionnaire');
   const currentPlanner = loadPlanner();
   if (currentPlanner.error) { storageNotice(currentPlanner.error); return navigate('schedule'); }
-  const commitmentCount = currentPlanner.state ? routineCommitments(currentPlanner.state).length : state.answers?.commitments.length || 0;
-  showDialog(`${dialogHead('A fresh start, your way.')}<p>Build a new routine from the beginning. Your current schedule stays available until you finish and save its replacement.</p>${state.draft ? '<p>You have an unfinished questionnaire. Starting fresh will replace those draft answers.</p>' : ''}<label class="check-label"><input id="keep-commitments" type="checkbox" checked>Keep my current weekly commitments (${commitmentCount})</label><p class="dialog-help">Wake-up times, goals, and preferences will start fresh. The new weekly pattern applies from today; separately added dated appointments and tasks remain in your planner.</p><div class="dialog-actions"><button class="btn btn-secondary" data-action="app-close">Cancel</button><button class="btn btn-primary" data-action="app-confirm-retake">Start questionnaire ${icon('arrow', 16)}</button></div>`);
+  showDialog(`${dialogHead('Edit your routine.')}<p>Your last questionnaire answers can be filled in so you can update your schedule without starting over. Your current schedule stays in place until you save the changes.</p>${state.draft ? '<p>You have an unfinished questionnaire. Continuing will replace those draft answers.</p>' : ''}<label class="check-label"><input id="keep-previous-answers" type="checkbox" checked>Keep all my previous answers</label><p class="dialog-help">This includes your daily rhythm, commitments, activities, and preferences. Dated appointments and tasks in your planner stay as they are.</p><div class="dialog-actions"><button class="btn btn-secondary" data-action="app-close">Cancel</button><button class="btn btn-primary" data-action="app-confirm-retake">Continue to questionnaire ${icon('arrow', 16)}</button></div>`);
 }
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
@@ -209,9 +208,18 @@ document.addEventListener('click', event => {
   else if (action === 'app-confirm-retake') {
     const currentPlanner = loadPlanner();
     if (currentPlanner.error) { storageNotice(currentPlanner.error); closeDialog(); navigate('schedule'); return; }
-    const commitments = currentPlanner.state ? routineCommitments(currentPlanner.state) : state.answers?.commitments || [];
-    state.draft = blankAnswers($('#keep-commitments').checked ? commitments : []);
-    state.draftStep = 0; persist(); closeDialog(); navigate('questionnaire');
+    const keepPrevious = $('#keep-previous-answers').checked;
+    state.draft = keepPrevious && state.answers ? structuredClone(state.answers) : blankAnswers();
+    if (keepPrevious && currentPlanner.state) {
+      const planner = currentPlanner.state;
+      state.draft.sleep = {
+        wake: planner.sleep.wake,
+        bed: planner.sleep.bed,
+        overrides: Object.fromEntries(Object.entries(planner.sleepOverrides || {}).map(([day, times]) => [day, { wake: times.wake, bed: times.bed }])),
+      };
+      state.draft.commitments = routineCommitments(planner);
+    }
+    state.draftStep = keepPrevious ? 1 : 0; persist(); closeDialog(); navigate('questionnaire');
   } else if (action === 'app-close') closeDialog();
 
 });
