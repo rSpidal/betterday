@@ -179,7 +179,7 @@ export function mountQuestionnaire(container, {
   }
   function render(focus) {
     const content = [sleepStep, commitmentsStep, activitiesStep, reviewStep][step]();
-    container.innerHTML = `<div class="wizard-layout"><header class="wizard-header"><div><h1>Make room for better.</h1></div></header>
+    container.innerHTML = `<div class="wizard-layout"><header class="wizard-header"><div><h1>Make room for better.</h1></div><a class="text-button" href="#schedule">${hasSchedule ? 'Back to my planner' : 'Skip for now'}</a></header>
       <div class="notice" data-save-warning role="status" ${saveFailed ? '' : 'hidden'}>Your browser could not save these changes. You can keep planning in this tab, but your changes may be lost when it closes.</div>
       <ol class="stepper" aria-label="Questionnaire progress">${STEPS.map((name, index) => `<li class="stepper-item ${index === step ? 'active' : ''} ${index < step ? 'complete' : ''}"><button type="button" data-action="goto" data-step="${index}" ${index > furthestStep ? 'disabled' : ''} ${index === step ? 'aria-current="step"' : ''}><span class="step-number">${index < step ? '✓' : index + 1}</span><span>${name}</span></button></li>`).join('')}</ol>
       <form class="questionnaire-form" novalidate>${errors.length ? `<div class="inline-error" tabindex="-1" role="alert"><strong>A quick check before we continue</strong><ul>${errors.map(error => `<li>${escape(error.message || error)}</li>`).join('')}</ul></div>` : ''}${content}

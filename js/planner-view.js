@@ -1,4 +1,5 @@
-import * as P from './planner.js?v=20261103.2';
+import * as P from './planner.js?v=20261103.10';
+import { getCommitmentDetails, saveWeeklyCommitment, deleteCommitmentGroup, firstCommitmentDate } from './commitments.js?v=20261103.10';
 import { loadPlanner, savePlanner, saveMigratedPlanner, importPlannerBackup } from './planner-storage.js?v=20261102';
 import { formatTime, toMinutes, DAYS } from './scheduler.js';
 import { renderTimePicker } from './time-picker.js?v=20261102.2';
@@ -25,6 +26,7 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
   let importGeneration = 0;
   let mounted = true;
   let dialogFocus;
+  let nextCommitmentRow = 0;
   const dialog = document.querySelector('#app-dialog');
   if (loaded.error) onNotice(loaded.error);
 
@@ -56,7 +58,8 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
       container.innerHTML = `<section class="empty-state"><h1>Your saved planner needs attention.</h1><p>${esc(loaded.error)}</p><p>Your original data has been kept. Download it before attempting recovery.</p>${action('backup','Download saved data')}${action('restore','Restore a backup')}</section>`;
       return;
     }
-    container.innerHTML = `<section class="planner-setup"><p class="eyebrow">YOUR NEXT CHAPTER</p><h1>Give your routine a real date.</h1><p>Keep your existing commitments and turn your activities into tasks you can plan, complete, and move as the day changes.</p><form id="planner-setup-form">${field('Start this routine on','startDate',P.weekStart(selectedDate),'date','required')}${field('Time zone','timeZone',Intl.DateTimeFormat().resolvedOptions().timeZone,'text','required list="planner-zones"')}<datalist id="planner-zones">${['America/New_York','America/Chicago','America/Denver','America/Los_Angeles','Europe/London','Europe/Paris','Asia/Tokyo','Australia/Sydney','UTC'].map(x=>`<option value="${x}">`).join('')}</datalist><p class="field-hint">Your weekly commitments will repeat from this date. Your original routine is kept as a backup in this browser.</p><button class="btn btn-primary" type="submit">Open my day planner →</button></form><p>Already have a saved planner?</p>${action('restore','Restore a backup')}</section>`;
+    const hasRoutine = Boolean(legacy?.schedule && legacy?.answers);
+    container.innerHTML = `<section class="planner-setup"><p class="eyebrow">${hasRoutine ? 'YOUR NEXT CHAPTER' : 'GET STARTED'}</p><h1>${hasRoutine ? 'Give your routine a real date.' : 'Start with a blank calendar.'}</h1><p>${hasRoutine ? 'Keep your existing commitments and turn your activities into tasks you can plan, complete, and move as the day changes.' : 'Add commitments and tasks as you go. The questionnaire is optional, and you can use it later.'}</p><form id="planner-setup-form">${hasRoutine ? field('Start this routine on','startDate',P.weekStart(selectedDate),'date','required') : `<input type="hidden" name="startDate" value="${selectedDate}">`}${field('Time zone','timeZone',Intl.DateTimeFormat().resolvedOptions().timeZone,'text','required list="planner-zones"')}<datalist id="planner-zones">${['America/New_York','America/Chicago','America/Denver','America/Los_Angeles','Europe/London','Europe/Paris','Asia/Tokyo','Australia/Sydney','UTC'].map(x=>`<option value="${x}">`).join('')}</datalist><p class="field-hint">${hasRoutine ? 'Your weekly commitments will repeat from this date. Your original routine is kept as a backup in this browser.' : 'Task planning starts with 7 AM–11 PM available. You can adjust these hours in Sleep & wake.'}</p><button class="btn btn-primary" type="submit">${hasRoutine ? 'Open my day planner' : 'Open calendar'} →</button></form>${!hasRoutine ? `<p>${legacy?.draft ? 'Your unfinished questionnaire is saved.' : 'Prefer guided setup?'} <a class="text-button" href="#questionnaire" data-action="app-questionnaire">${legacy?.draft ? 'Continue questionnaire' : 'Use questionnaire'}</a></p>` : ''}<p>Already have a saved planner?</p>${action('restore','Restore a backup')}</section>`;
   }
   function render() {
     if (!state) return initView();
@@ -66,16 +69,17 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
     const active = tasks.filter(t=>t.status==='active');
     const next = list.find(e=>toMinutes(e.end)>dateNow() && e.kind==='session');
     const sleep = P.sleepForDate(state, selectedDate);
-    container.innerHTML = `<div class="schedule-page planner-page"><header class="page-top"><div><p class="eyebrow">YOUR DAY, AS IT UNFOLDS</p><h1>${selectedDate===today?'Make room for today.':'A day with room to breathe.'}</h1><p>${dateLabel(selectedDate)} · ${esc(state.timeZone.replaceAll('_',' '))}</p></div><div class="top-actions">${action('event-new','+ Add appointment')}${action('task-new','+ Add task','','btn btn-primary')}</div></header>
+    container.innerHTML = `<div class="schedule-page planner-page"><header class="page-top"><div><p class="eyebrow">YOUR DAY, AS IT UNFOLDS</p><h1>${selectedDate===today?'Make room for today.':'A day with room to breathe.'}</h1><p>${dateLabel(selectedDate)} · ${esc(state.timeZone.replaceAll('_',' '))}</p></div><div class="top-actions">${action('event-new','+ Add commitment')}${action('task-new','+ Add task','','btn btn-primary')}</div></header>
       <p id="planner-status" class="inline-error" role="alert" tabindex="-1" hidden></p>
       <div class="planner-datebar"><div class="date-controls">${action('previous','←','aria-label="Previous day"','icon-btn')}<label class="sr-only" for="plan-date">Planning date</label><input id="plan-date" type="date" value="${selectedDate}" aria-label="Planning date">${action('next','→','aria-label="Next day"','icon-btn')}${action('today','Today','','text-button')}</div><div class="planner-tools">${action('sleep','Sleep & wake')}${action('exchange','Import / export')}${action('undo','Undo',''+(!state.undo?' disabled':''))}</div></div>
       <section class="now-card" aria-label="Your next step"><div><p class="eyebrow">${selectedDate===today?'FROM HERE':'THE PLAN AHEAD'}</p><h2>${next?esc(next.title):active.some(t=>t.eligible)?'Find a little space for what matters.':'A little breathing room.'}</h2><p>${next?`${times(next)} · ${toMinutes(next.start)<=dateNow()?'Work session in progress':'Your next planned work session'}`:active.some(t=>t.eligible)?'We’ll suggest times for your tasks around your fixed commitments.':'Add a task or leave some time open. You’re in control.'}</p></div><div class="now-actions">${selectedDate===today?action('awake',state.wakeLog[selectedDate]?`Awake at ${formatTime(state.wakeLog[selectedDate])}`:'I’m awake') : ''}${action('replan','Preview my plan →',selectedDate<today?'disabled':'','btn btn-primary')}</div></section>
-      <div class="planner-layout"><section class="calendar-panel"><div class="calendar-toolbar"><div><h2>${view==='week'?'Your week':'Your day'}</h2><small>Fixed commitments stay in place · tasks can move</small></div><div class="view-toggle" role="group" aria-label="Schedule view">${['day','week'].map(v=>action('view',v==='day'?'Day':'Week',`data-view="${v}" aria-pressed="${view===v}"`,view===v?'active':'')).join('')}</div></div>${view==='week'?weekView():agenda(list)}<div class="calendar-legend"><span><i class="legend-dot"></i>Appointments</span><span><i class="legend-dot activity"></i>Work sessions</span><span>Sleep: ${formatTime(sleep.bed)} – ${formatTime(sleep.wakeLatest||sleep.wake)}</span></div></section>
+      <div class="planner-layout"><section class="calendar-panel"><div class="calendar-toolbar"><div><h2>${view==='week'?'Your week':'Your day'}</h2><small>Fixed commitments stay in place · tasks can move</small></div><div class="view-toggle" role="group" aria-label="Schedule view">${['day','week'].map(v=>action('view',v==='day'?'Day':'Week',`data-view="${v}" aria-pressed="${view===v}"`,view===v?'active':'')).join('')}</div></div>${view==='week'?weekView():agenda(list)}<div class="calendar-legend"><span><i class="legend-dot"></i>Commitments</span><span><i class="legend-dot activity"></i>Work sessions</span><span>Sleep: ${formatTime(sleep.bed)} – ${formatTime(sleep.wakeLatest||sleep.wake)}</span></div></section>
       <aside class="task-panel"><div class="task-panel-heading"><div><h2>Your tasks</h2></div>${action('task-new','+','aria-label="Add a task"','icon-btn')}</div><div class="task-tabs" role="group" aria-label="Task list">${action('tab',`Active (${active.length})`,'data-tab="active" aria-pressed="'+(taskTab==='active')+'"',taskTab==='active'?'active':'')}${action('tab','Completed','data-tab="completed" aria-pressed="'+(taskTab==='completed')+'"',taskTab==='completed'?'active':'')}</div><div class="task-list">${taskTab==='completed'?completedView(tasks):active.length?active.map((t,i)=>taskCard(t,i,active.length)).join(''):'<div class="tasks-empty"><h3>Start with one intention.</h3><p>Add what you want to do and how much time it needs. We’ll help you find a place for it.</p>'+action('task-new','Add your first task','','btn btn-primary')+'</div>'}</div></aside></div>
-      <footer class="planner-footer"><p>Saved in this browser. A passing work session never marks a task complete.</p><div>${action('backup','Download backup','','text-button')}${action('restore','Restore backup','','text-button')}${action('routine','Edit weekly routine','','text-button')}</div></footer></div>`;
+      <footer class="planner-footer"><p>Saved in this browser. A passing work session never marks a task complete.</p><div>${action('backup','Download backup','','text-button')}${action('restore','Restore backup','','text-button')}${action('routine',legacy?.draft ? 'Continue questionnaire' : P.hasWeeklyRoutine(legacy, state) ? 'Edit weekly routine' : 'Set up a weekly routine','','text-button')}</div></footer></div>`;
+
   }
   function agenda(events) {
-    return `<div class="dated-agenda">${events.length?events.map(e=>`<button class="agenda-event type-${e.kind==='fixed'?'commitment':'activity'}" data-plan="event-edit" data-id="${esc(e.id)}"><span>${formatTime(e.start)}<br>${e.end==='24:00'?'Midnight':formatTime(e.end)}</span><div><strong>${esc(e.title)}</strong><small>${e.kind==='fixed'?'Fixed appointment':e.locked?'Locked work session':'Flexible work session'}${e.recurrence?' · Repeats':''} · ${minutesLabel(toMinutes(e.end)-toMinutes(e.start))}</small>${overlaps(e,events)?'<small class="conflict-label">Overlaps another event</small>':''}</div><span aria-hidden="true">↗</span></button>`).join(''):'<div class="agenda-empty">An open day.<br>Add an appointment or preview a plan for your tasks.</div>'}</div>`;
+    return `<div class="dated-agenda">${events.length?events.map(e=>`<button class="agenda-event type-${e.kind==='fixed'?'commitment':'activity'}" data-plan="event-edit" data-id="${esc(e.id)}"><span>${formatTime(e.start)}<br>${e.end==='24:00'?'Midnight':formatTime(e.end)}</span><div><strong>${esc(e.title)}</strong><small>${e.kind==='fixed'?'Fixed commitment':e.locked?'Locked work session':'Flexible work session'}${e.recurrence?' · Repeats':''} · ${minutesLabel(toMinutes(e.end)-toMinutes(e.start))}</small>${overlaps(e,events)?'<small class="conflict-label">Overlaps another event</small>':''}</div><span aria-hidden="true">↗</span></button>`).join(''):'<div class="agenda-empty">An open day.<br>Add a commitment or preview a plan for your tasks.</div>'}</div>`;
   }
   function overlaps(event, events) { return events.some(other=>other.id!==event.id&&toMinutes(event.start)<toMinutes(other.end)&&toMinutes(event.end)>toMinutes(other.start)); }
   function weekView() {
@@ -109,17 +113,97 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
     const resolved = task && P.tasksForDate(state,selectedDate,{includeCompleted:true}).find(t=>t.id===id);
     show(task?'Shape this task.':'What would you like to do?',`<form id="planner-task-form" data-id="${esc(id||'')}">${field('Task name','title',task?.title||'','text','required maxlength="200" autofocus placeholder="e.g. Practice flute"')}<div class="form-grid">${field(task?'Time remaining (minutes)':'Time needed (minutes)','remaining',resolved?.remaining??task?.remaining??30,'number','min="1" max="525600" required')}${field('Priority · 1 is highest','priority',task?.priority??state.tasks.length+1,'number','min="1" max="100000" required')}</div><div class="form-grid">${field('Deadline (optional)','deadline',task?.deadline||'','date')}${select('Repeat','repeat',task?.recurrence?.frequency||'none',[['none','Does not repeat'],['daily','Every day'],['weekly','Weekly on '+(task?.recurrence?.days||[dayIndex(selectedDate)]).map(day=>DAYS[day]).join(', ')]])}</div><p class="field-hint">For repeating tasks, time remaining applies to this date. Other details apply to future occurrences too. Changing the repeat pattern starts a new pattern from this date and keeps completion history.</p><label class="checkbox-label"><input type="checkbox" name="split" ${task?.split?'checked':''}>Can split into shorter work sessions</label>${field('Shortest session (minutes)','minSession',task?.minSession||15,'number','min="1" max="1440" required')}<p class="dialog-help">We’ll place this task when you preview your plan. Priorities guide the order; deadlines and available time also matter.</p><div class="dialog-actions">${action('close','Cancel')}<button class="btn btn-primary" type="submit">Save task</button></div></form>`);
   }
+  function commitmentTimeRow(slot, index) {
+    const pair = `planner-commitment-${++nextCommitmentRow}`;
+    return `<fieldset class="planner-commitment-time" data-commitment-time data-slot="${esc(JSON.stringify(slot))}">
+      <legend data-time-heading>Time ${index + 1}</legend>
+      <div class="commitment-time-actions">${action('commitment-time-remove','Remove time','','text-button')}</div>
+      <fieldset class="day-fieldset" data-event-weekdays><legend>Repeat on</legend><div class="commitment-weekdays">${DAYS.map((day,i)=>`<label><input type="checkbox" name="weekdays" value="${i}" aria-label="${day}" ${slot.days.includes(i)?'checked':''}><span>${day.slice(0,3)}</span></label>`).join('')}</div></fieldset>
+      <div class="form-grid">${renderTimePicker({label:'Starts',value:slot.start||'',name:'start',pair,endpoint:'start'})}${renderTimePicker({label:'Ends',value:slot.end||'',name:'end',pair,endpoint:'end',endOfDay:true})}</div>
+    </fieldset>`;
+  }
   function eventForm(id, date = selectedDate) {
     const event = id ? P.getEventsForDate(state,date).find(e=>e.id===id) : null;
     if (id && !event) throw new Error('This event is no longer on this date. Refresh the plan.');
-    show(event?'A little adjustment.':'Make room for a commitment.',`<form id="planner-event-form" data-id="${esc(id||'')}" data-date="${date}">${field('Event name','title',event?.title||'','text','required maxlength="200" autofocus placeholder="e.g. Rehearsal"')}<div class="form-grid">${field('Date','date',date,'date','required')}${select('Repeat','repeat',event?.recurrence?.frequency||'none',[['none','Does not repeat'],['daily','Every day'],['weekly','Every week']])}</div><div class="form-grid">${renderTimePicker({label:'Starts',value:event?.start||'',name:'start',pair:'dated-event',endpoint:'start'})}${renderTimePicker({label:'Ends',value:event?.end||'',name:'end',pair:'dated-event',endpoint:'end',endOfDay:true})}</div>${event?.recurrence?select('Apply change to','scope','this',[['this','Only this date'],['all','The whole series']]):''}${event?.kind==='session'?`<label class="checkbox-label"><input name="locked" type="checkbox" ${event.locked?'checked':''}>Keep this work session at its chosen time</label>`:''}${select('If this overlaps other events','conflict','move',[['move','Preview moving tasks on this date'],['reject','Keep other events fixed; show a conflict'],['allow','Keep both and show the overlap'],['replace','Replace a selected event']])}<div class="event-replacement" data-event-replacement hidden>${select('Event to replace','replaceId','',[['','Choose an event'],...P.getEventsForDate(state,date).filter(e=>e.id!==id).map(e=>[e.id,`${e.title} · ${formatTime(e.start)}`])])}</div><p class="dialog-help">Fixed commitments never move automatically. Midnight as an end means the end of this date. Split overnight appointments across two dates.</p><div class="dialog-actions">${event?action('event-delete','Delete',`data-id="${esc(id)}" data-date="${date}"`,'btn btn-quiet delete-action'):''}${action('close','Cancel')}<button class="btn btn-primary" type="submit">Review appointment</button></div></form>`);
+    const noun = event?.kind === 'session' ? 'work session' : 'commitment';
+    const repeat = event?.recurrence?.frequency || 'none';
+    const details = event?.kind === 'fixed' && event.recurrence ? getCommitmentDetails(state,id,date) : null;
+    const slots = details?.slots || [{id:`new-${++nextCommitmentRow}`,days:repeat==='weekly'?event.recurrence.days:[dayIndex(date)],start:event?.start||'',end:event?.end||'',until:event?.recurrence?.until||null}];
+    const grouped = details && (details.masterIds.length > 1 || event.commitmentGroupId);
+    show(event?`Edit ${noun}.`:'Add a commitment.',`<form id="planner-event-form" data-id="${esc(id||'')}" data-date="${date}" data-recurring="${Boolean(event?.recurrence)}" data-grouped="${Boolean(grouped)}" data-fixed="${event?.kind!=='session'}" data-weekdays-edited="${Boolean(event)}">
+      ${field(event?.kind === 'session' ? 'Work session name' : 'Commitment name','title',event?.title||'','text','required maxlength="200" autofocus placeholder="e.g. Rehearsal"')}
+      ${event?.recurrence?select('Apply change to','scope','this',[['this','Only this date'],['all','The whole commitment']]):''}
+      <div class="form-grid">${field(event ? 'Date' : 'Start on or after','date',date,'date','required')}${select('Repeat','repeat',repeat,[['none','Does not repeat'],['daily','Every day'],['weekly','Every week']])}</div>
+      <p class="field-hint" data-event-repeat-note hidden>To edit the weekly days and times together, choose “The whole commitment.”</p>
+      ${event?.recurrence?`<fieldset class="commitment-occurrence" data-event-occurrence><legend class="sr-only">Time for this date</legend><div class="form-grid">${renderTimePicker({label:'Starts',value:event.start,name:'occurrenceStart',pair:'commitment-occurrence',endpoint:'start'})}${renderTimePicker({label:'Ends',value:event.end,name:'occurrenceEnd',pair:'commitment-occurrence',endpoint:'end',endOfDay:true})}</div></fieldset>`:''}
+      <fieldset class="commitment-times" data-event-times><legend class="sr-only">Commitment times</legend><p class="field-hint" data-weekly-help>Select the days that share a time. Add another time when a day starts or ends differently.</p><div data-commitment-rows>${slots.map(commitmentTimeRow).join('')}</div>${action('commitment-time-add','+ Add another day and time','','btn btn-secondary')}</fieldset>
+      ${event?.kind==='session'?`<label class="checkbox-label"><input name="locked" type="checkbox" ${event.locked?'checked':''}>Keep this work session at its chosen time</label>`:''}
+      ${select('If this overlaps other events','conflict','move',[['move','Preview moving tasks on this date'],['reject','Keep other events fixed; show a conflict'],['allow','Keep both and show the overlap'],['replace','Replace a selected event']])}
+      <div class="event-replacement" data-event-replacement hidden>${select('Event to replace','replaceId','',[['','Choose an event']])}</div>
+      <p class="dialog-help">Fixed commitments never move automatically. Midnight as an end means the end of this date. Split overnight commitments across two dates.</p>
+      <div class="dialog-actions">${event?action('event-delete','Delete',`data-id="${esc(id)}" data-date="${date}"`,'btn btn-quiet delete-action'):''}${action('close','Cancel')}<button class="btn btn-primary" type="submit">Review ${noun}</button></div></form>`,true);
+    const form=dialog.querySelector('#planner-event-form');
+    syncEventRepeat(form); syncEventReplacement(form);
   }
-  function review(candidate = state, {title='A plan you can make your own.',intro='Review the proposed work sessions. Your fixed commitments and work already underway stay in place.', date=selectedDate} = {}) {
+  function onlyOccurrence(form) { return form.dataset.recurring === 'true' && form.elements.scope.value === 'this'; }
+  function weeklyCommitment(form) { return !onlyOccurrence(form) && form.elements.repeat.value === 'weekly' && form.dataset.fixed === 'true'; }
+  function commitmentSlots(form) {
+    return [...form.querySelectorAll('[data-commitment-time]')].map(row=>({
+      ...JSON.parse(row.dataset.slot),
+      days:[...row.querySelectorAll('[name="weekdays"]:checked')].map(input=>Number(input.value)),
+      start:row.querySelector('[name="start"]').value,end:row.querySelector('[name="end"]').value,
+    }));
+  }
+  function syncEventRepeat(form) {
+    const onlyThisDate = onlyOccurrence(form), weekly = form.elements.repeat.value === 'weekly';
+    form.elements.repeat.disabled = onlyThisDate || form.dataset.grouped === 'true';
+    form.elements.date.closest('label').querySelector('span').textContent = onlyThisDate ? 'Date' : form.dataset.recurring === 'true' && weekly ? 'Preview on or after' : form.dataset.id ? 'Date' : 'Start on or after';
+    const occurrence = form.querySelector('[data-event-occurrence]');
+    if (occurrence) { occurrence.hidden = !onlyThisDate; occurrence.disabled = !onlyThisDate; }
+    const group = form.querySelector('[data-event-times]');
+    group.hidden = onlyThisDate; group.disabled = onlyThisDate;
+    const rows = [...group.querySelectorAll('[data-commitment-time]')];
+    rows.forEach((row,index)=>{
+      row.hidden = !weekly && index > 0; row.disabled = !weekly && index > 0;
+      row.classList.toggle('weekly-time',weekly);
+      row.querySelector('[data-time-heading]').textContent = `Time ${index + 1}`;
+      row.querySelector('[data-time-heading]').hidden = !weekly;
+      row.querySelector('.commitment-time-actions').hidden = !weekly || rows.length === 1;
+      const days=row.querySelector('[data-event-weekdays]'); days.hidden=!weekly;days.disabled=!weekly;
+    });
+    group.querySelector('[data-plan="commitment-time-add"]').hidden = !weekly || form.dataset.fixed !== 'true';
+    group.querySelector('[data-weekly-help]').hidden = !weekly;
+    form.querySelector('[data-event-repeat-note]').hidden = !onlyThisDate;
+  }
+  function eventFormDate(form) {
+    const date=form.elements.date.value;
+    if(!P.isDate(date) || form.elements.repeat.value!=='weekly' || onlyOccurrence(form)) return date;
+    return firstCommitmentDate(commitmentSlots(form),date);
+  }
+  function syncEventReplacement(form) {
+    form.querySelector('[data-event-replacement]').hidden=form.elements.conflict.value!=='replace';
+    const date=eventFormDate(form),previous=form.elements.replaceId.value;
+    const existing=form.dataset.id ? P.getEventsForDate(state,form.dataset.date).find(event=>event.id===form.dataset.id) : null;
+    const details=weeklyCommitment(form)&&existing ? getCommitmentDetails(state,existing.id,form.dataset.date) : null;
+    const excludedIds=new Set(details?.masterIds||[existing?.masterId||existing?.id]);
+    const events=P.isDate(date)?P.getEventsForDate(state,date).filter(event=>!excludedIds.has(event.masterId||event.id)):[];
+    form.elements.replaceId.innerHTML=`<option value="">Choose an event</option>${events.map(event=>`<option value="${esc(event.id)}">${esc(event.title)} · ${formatTime(event.start)}</option>`).join('')}`;
+    if(events.some(event=>event.id===previous)) form.elements.replaceId.value=previous;
+  }
+  function commitmentSummary(slots) {
+    return `<ul class="commitment-summary">${slots.map(slot=>`<li><strong>${esc(slot.days.map(day=>DAYS[day]).join(', '))}</strong><br>${times(slot)}${slot.until?` · through ${dateLabel(slot.until)}`:''}</li>`).join('')}</ul>`;
+  }
+  function recurrenceSummary(values) {
+    if (!values.recurrence) return '';
+    const repeat = values.recurrence.frequency === 'daily' ? 'Every day' : 'Every ' + values.recurrence.days.map(day=>DAYS[day]).join(', ');
+    return `${repeat}${values.recurrence.until ? ` through ${dateLabel(values.recurrence.until)}` : ''}.`;
+  }
+  function review(candidate = state, {title='A plan you can make your own.',intro='Review the proposed work sessions. Your fixed commitments and work already underway stay in place.', date=selectedDate,commitment=null} = {}) {
     if (date<P.todayInZone(state.timeZone)) throw new Error('Choose today or a future date to replan.');
     const preview = P.previewReplan(candidate,{date,nowMinutes:dateNow(date)});
-    pending = {candidate,preview,original:state,date,createdAt:Date.now()};
+    pending = {candidate,preview,original:state,date,commitment,createdAt:Date.now()};
     const changes = preview.changes || [];
-    show(title,`<p>${esc(intro)}</p><p class="preview-date">${dateLabel(date)} · ${preview.events.length} proposed work sessions</p><div class="plan-preview">${changes.length?changes.map(c=>`<article class="plan-change"><strong>${esc(c.title)}</strong><div><span>${c.before.length?c.before.map(times).join(', '):'Not scheduled'}</span><span aria-hidden="true">→</span><span>${c.after.length?c.after.map(times).join(', '):'Not placed'}</span></div><p>${esc(c.reason)}</p></article>`).join(''):'<p>Your existing plan already fits. There are no work-session changes.</p>'}</div>${preview.unplaced.length?`<section class="unplaced-preview"><h3>Still needs a little space</h3>${preview.unplaced.map(t=>`<p><strong>${esc(t.title)}</strong> · ${minutesLabel(t.minutes)}<br>${esc(t.reason)}</p>`).join('')}</section>`:''}${preview.notes?.length?`<ul class="notice-list">${preview.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>`:''}<p class="dialog-help">Nothing changes until you apply this plan. Undo restores the previous plan and any appointment or wake-up change included here.</p><div class="dialog-actions">${action('close','Keep current plan')}${action('apply','Apply this plan','','btn btn-primary')}</div>`,true);
+    show(title,`<p>${esc(intro)}</p>${commitment?`<p><strong>${esc(commitment.title)}</strong></p>${commitmentSummary(commitment.slots)}<p>These weekly times will be saved together. Task adjustments below apply only to ${dateLabel(date)}.</p>`:''}<p class="preview-date">${dateLabel(date)} · ${preview.events.length} proposed work sessions</p><div class="plan-preview">${changes.length?changes.map(c=>`<article class="plan-change"><strong>${esc(c.title)}</strong><div><span>${c.before.length?c.before.map(times).join(', '):'Not scheduled'}</span><span aria-hidden="true">→</span><span>${c.after.length?c.after.map(times).join(', '):'Not placed'}</span></div><p>${esc(c.reason)}</p></article>`).join(''):'<p>Your existing plan already fits. There are no work-session changes.</p>'}</div>${preview.unplaced.length?`<section class="unplaced-preview"><h3>Still needs a little space</h3>${preview.unplaced.map(t=>`<p><strong>${esc(t.title)}</strong> · ${minutesLabel(t.minutes)}<br>${esc(t.reason)}</p>`).join('')}</section>`:''}${preview.notes?.length?`<ul class="notice-list">${preview.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>`:''}<p class="dialog-help">Nothing changes until you apply this plan. Undo restores the previous plan and any commitment or wake-up change included here.</p><div class="dialog-actions">${action('close','Keep current plan')}${action('apply','Apply this plan','','btn btn-primary')}</div>`,true);
   }
   function sleepForm() {
     const s = state.sleep;
@@ -149,20 +233,21 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
     try {
       if(event.target.id==='plan-date') { if(P.isDate(event.target.value)){selectedDate=event.target.value;render();} }
       const eventForm = event.target.closest('#planner-event-form');
-      if (eventForm && ['date','conflict'].includes(event.target.name)) {
-        const replacement = eventForm.querySelector('[data-event-replacement]');
-        replacement.hidden = eventForm.elements.conflict.value !== 'replace';
-        if (event.target.name === 'date' && P.isDate(event.target.value)) {
-          eventForm.elements.replaceId.innerHTML = `<option value="">Choose an event</option>${P.getEventsForDate(state,event.target.value).filter(e=>e.id!==eventForm.dataset.id).map(e=>`<option value="${esc(e.id)}">${esc(e.title)} · ${formatTime(e.start)}</option>`).join('')}`;
+      if (eventForm && ['date','repeat','scope','weekdays'].includes(event.target.name)) {
+        if (event.target.name === 'weekdays') eventForm.dataset.weekdaysEdited = 'true';
+        if (event.target.name === 'date' && P.isDate(event.target.value) && eventForm.dataset.recurring !== 'true' && eventForm.dataset.weekdaysEdited !== 'true') {
+          eventForm.querySelectorAll('[name="weekdays"]').forEach(input=>{input.checked=Number(input.value)===dayIndex(event.target.value);});
         }
+        syncEventRepeat(eventForm);
       }
+      if (eventForm && ['date','repeat','scope','weekdays','conflict'].includes(event.target.name)) syncEventReplacement(eventForm);
       if(event.target.id==='planner-backup-file') {
         const file=event.target.files[0];if(!file)return;if(file.size>15_000_000)throw new Error('Choose a backup smaller than 15 MB.');
         const generation=++importGeneration;const raw=await file.text();if(!mounted||generation!==importGeneration||!dialog.open)return;
         let parsed;try{parsed=JSON.parse(raw);}catch{throw new Error('This file is not valid JSON. Your current plan has not changed.');}
         const restored=importPlannerBackup(JSON.stringify(parsed.planner||parsed));
         pending={restore:restored,original:state};
-        show('Review your backup.',`<p>${restored.tasks.length} tasks · ${restored.events.length} saved appointments and work-session records</p><p>Time zone: ${esc(restored.timeZone)}<br>Routine starts: ${dateLabel(restored.startDate)}</p><p>This replaces the current dated planner. Your original weekly questionnaire remains unchanged.</p><div class="dialog-actions">${action('close','Cancel')}${action('restore-apply','Restore this planner','','btn btn-primary')}</div>`);return;
+        show('Review your backup.',`<p>${restored.tasks.length} tasks · ${restored.events.length} saved commitments and work-session records</p><p>Time zone: ${esc(restored.timeZone)}<br>Routine starts: ${dateLabel(restored.startDate)}</p><p>This replaces the current dated planner. Your original weekly questionnaire remains unchanged.</p><div class="dialog-actions">${action('close','Cancel')}${action('restore-apply','Restore this planner','','btn btn-primary')}</div>`);return;
       }
       if(event.target.id!=='calendar-file') return;
       const file=event.target.files[0]; if(!file)return;
@@ -171,7 +256,7 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
       const generation=++importGeneration;const original=state;const text=await file.text();if(!mounted||generation!==importGeneration||!dialog.open||state!==original)return;
       const result=parseCalendar(text,{timeZone:state.timeZone,startDate:from,endDate:through,existingEvents:state.events});
       pending={import:result,original:state};
-      show('Review your calendar import.',`<p>${result.events.length} dated event blocks · ${result.duplicateCount} duplicates skipped · ${result.skipped} unsupported items skipped</p>${result.warnings.length?`<div class="notice"><strong>Import notes</strong><ul>${result.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:''}<div class="import-preview">${result.events.slice(0,200).map(e=>`<p><strong>${esc(e.title)}</strong><br>${dateLabel(e.date,true)} · ${times(e)}</p>`).join('')}${result.events.length>200?`<p>And ${result.events.length-200} more event blocks.</p>`:''}</div><p class="dialog-help">Imported events become fixed appointments. Any overlaps stay visible. Flexible tasks can be replanned afterward.</p><div class="dialog-actions">${action('close','Cancel')}${action('import-apply',`Add ${result.events.length} event blocks`,result.events.length?'':'disabled','btn btn-primary')}</div>`,true);
+      show('Review your calendar import.',`<p>${result.events.length} dated event blocks · ${result.duplicateCount} duplicates skipped · ${result.skipped} unsupported items skipped</p>${result.warnings.length?`<div class="notice"><strong>Import notes</strong><ul>${result.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:''}<div class="import-preview">${result.events.slice(0,200).map(e=>`<p><strong>${esc(e.title)}</strong><br>${dateLabel(e.date,true)} · ${times(e)}</p>`).join('')}${result.events.length>200?`<p>And ${result.events.length-200} more event blocks.</p>`:''}</div><p class="dialog-help">Imported events become fixed commitments. Any overlaps stay visible. Flexible tasks can be replanned afterward.</p><div class="dialog-actions">${action('close','Cancel')}${action('import-apply',`Add ${result.events.length} event blocks`,result.events.length?'':'disabled','btn btn-primary')}</div>`,true);
     } catch(error) {report(error);}
   }
   function onClick(event) {
@@ -190,11 +275,24 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
       if(!state)return;
       if(plan==='task-new'||plan==='task-edit')return taskForm(id);
       if(plan==='event-new'||plan==='event-edit')return eventForm(id,button.dataset.date||selectedDate);
+      if(plan==='commitment-time-add') {
+        const form=button.closest('form'),rows=form.querySelector('[data-commitment-rows]');
+        const original=commitmentSlots(form)[0];
+        rows.insertAdjacentHTML('beforeend',commitmentTimeRow({id:`new-${++nextCommitmentRow}`,days:[],start:'',end:'',until:original?.until||null},rows.children.length));
+        form.dataset.weekdaysEdited='true'; syncEventRepeat(form);syncEventReplacement(form);
+        rows.lastElementChild.querySelector('[name="weekdays"]').focus();return;
+      }
+      if(plan==='commitment-time-remove') {
+        const form=button.closest('form'),row=button.closest('[data-commitment-time]');
+        if(form.querySelectorAll('[data-commitment-time]').length===1)return;
+        row.remove();form.dataset.weekdaysEdited='true';syncEventRepeat(form);syncEventReplacement(form);
+        form.querySelector('[data-plan="commitment-time-add"]').focus();return;
+      }
       if(plan==='replan')return review();
       if(plan==='apply') {
         if(!pending?.preview)throw new Error('Create a new preview first.');
         if(state!==pending.original)throw new Error('Your plan changed. Close this preview and generate a new one.');
-        if(pending.date===P.todayInZone(state.timeZone)&&Date.now()-pending.createdAt>60000) {const p=pending;review(p.candidate,{date:p.date,intro:'Time has moved on. Review this refreshed plan before applying.'});return;}
+        if(pending.date===P.todayInZone(state.timeZone)&&Date.now()-pending.createdAt>60000) {const p=pending;review(p.candidate,{date:p.date,commitment:p.commitment,intro:'Time has moved on. Review this refreshed plan before applying.'});return;}
         selectedDate=pending.date;return commit(P.applyReplan(pending.candidate,pending.preview,{undoState:pending.original}),'Your updated plan is ready.');
       }
       if(plan==='undo')return commit(P.undoLastChange(state),'Previous state restored.');
@@ -223,9 +321,10 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
       }
       if(plan==='event-delete') {
         const date=button.dataset.date;const e=P.getEventsForDate(state,date).find(x=>x.id===id);const scope=dialog.querySelector('[name="scope"]')?.value||'this';
-        return show('Remove this event?',`<p>${esc(e.title)} · ${dateLabel(date)}</p><p>${scope==='all'?'This removes the whole recurring series.':'This removes only this dated occurrence.'} Undo will be available.</p><div class="dialog-actions">${action('close','Keep event')}${action('delete-confirm','Remove event',`data-id="${esc(id)}" data-date="${date}" data-scope="${scope}"`,'btn btn-danger')}</div>`);
+        const grouped=scope==='all' && e.kind==='fixed' && getCommitmentDetails(state,id,date);
+        return show('Remove this event?',`<p>${esc(e.title)} · ${dateLabel(date)}</p><p>${grouped?'This removes all weekly times for this commitment. Separately edited dates stay on your calendar.':scope==='all'?'This removes the whole recurring series.':'This removes only this dated occurrence.'} Undo will be available.</p><div class="dialog-actions">${action('close','Keep event')}${action('delete-confirm','Remove event',`data-id="${esc(id)}" data-date="${date}" data-scope="${scope}" data-grouped="${Boolean(grouped)}"`,'btn btn-danger')}</div>`);
       }
-      if(plan==='delete-confirm')return commit(P.deleteEvent(state,id,{date:button.dataset.date,scope:button.dataset.scope}),'Event removed.');
+      if(plan==='delete-confirm')return commit(button.dataset.grouped==='true'?deleteCommitmentGroup(state,id,button.dataset.date):P.deleteEvent(state,id,{date:button.dataset.date,scope:button.dataset.scope}),'Event removed.');
       if(plan==='import-apply') {
         if(!pending?.import||state!==pending.original)throw new Error('Choose your calendar file again to refresh the preview.');
         const next=clone(state);next.events=mergeCalendarEvents(state.events,pending.import.events).events;
@@ -249,17 +348,29 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
         return commit(next,'Task saved. Preview your plan when you’re ready.');
       }
       if(form.id==='planner-event-form') {
-        const date=get('date'),existing=id?P.getEventsForDate(state,form.dataset.date).find(e=>e.id===id):null,scope=get('scope')||'this',mode=get('conflict');
-        if(mode==='move'&&date<P.todayInZone(state.timeZone))throw new Error('Past appointments can be edited using a conflict check or an intentional overlap.');
+        const existing=id?P.getEventsForDate(state,form.dataset.date).find(e=>e.id===id):null,scope=get('scope')||'this',mode=get('conflict');
+        const onlyThisDate=Boolean(existing?.recurrence && scope==='this');
+        const repeat=onlyThisDate?'none':form.elements.repeat.value;
+        const slots=commitmentSlots(form),days=slots[0].days;
+        if(repeat==='weekly' && slots.some(slot=>!slot.days.length)) throw new Error('Choose at least one day for each commitment time.');
+        const date=eventFormDate(form);
+        if(!date) throw new Error('No selected weekday remains before this commitment ends. Choose an earlier date.');
+        if(mode==='move'&&date<P.todayInZone(state.timeZone))throw new Error('Past commitments can be edited using a conflict check or an intentional overlap.');
         let candidate=state;
-        if(mode==='replace') {if(!get('replaceId'))throw new Error('Choose the event this appointment replaces.');candidate=P.deleteEvent(candidate,get('replaceId'),{date,scope:'this'});}
-        const repeat=get('repeat');const values={...existing,id:id||undefined,title:get('title').trim(),date,start:get('start'),end:get('end'),kind:existing?.kind||'fixed',taskId:existing?.taskId||null,locked:existing?.kind==='session'?data.has('locked'):true,recurrence:repeat==='none'?null:{frequency:repeat,days:[dayIndex(date)],until:existing?.recurrence?.until||null},excludedDates:existing?.excludedDates||[]};
+        if(mode==='replace') {if(!get('replaceId'))throw new Error('Choose the event this commitment replaces.');candidate=P.deleteEvent(candidate,get('replaceId'),{date,scope:'this'});}
+        if(weeklyCommitment(form)) {
+          const values={id:id||undefined,sourceDate:form.dataset.date,title:get('title').trim(),date,slots};
+          candidate=saveWeeklyCommitment(candidate,values,{nowMinutes:dateNow(date),conflict:mode==='reject'?'reject':mode==='move'?'move':'allow'});
+          if(mode==='move')return review(candidate,{date,commitment:values,intro:'Review the commitment and how flexible tasks fit around it. Changes are saved only when you apply.'});
+          return reviewEventOnly(candidate,values,mode,scope);
+        }
+        const values={...existing,id:id||undefined,title:get('title').trim(),date,start:onlyThisDate?get('occurrenceStart'):slots[0].start,end:onlyThisDate?get('occurrenceEnd'):slots[0].end,kind:existing?.kind||'fixed',taskId:existing?.taskId||null,locked:existing?.kind==='session'?data.has('locked'):true,recurrence:repeat==='none'?null:{frequency:repeat,...(repeat==='weekly'?{days}:{}),until:existing?.recurrence?.until||null},excludedDates:existing?.excludedDates||[]};
         if(mode==='move') {
           const conflicts=P.getEventsForDate(candidate,date).filter(e=>e.id!==id&&e.masterId!==existing?.masterId&&toMinutes(values.start)<toMinutes(e.end)&&toMinutes(values.end)>toMinutes(e.start));
           if(conflicts.some(e=>e.kind==='fixed'||e.locked||toMinutes(e.start)<dateNow(date)))throw new Error('This overlaps a fixed or already-started event. Choose another time, explicitly replace it, or keep both.');
         }
         candidate=P.saveEvent(candidate,values,{scope,date:form.dataset.date,nowMinutes:dateNow(date),conflict:mode==='reject'?'reject':mode==='move'?'move':'allow'});
-        if(mode==='move')return review(candidate,{date,intro:`Add or update “${values.title}” and review how flexible tasks fit around it. The appointment is saved only when you apply.`});
+        if(mode==='move')return review(candidate,{date,intro:`Add or update “${values.title}” (${times(values)}). ${recurrenceSummary(values)} Review how flexible tasks fit around it. Changes are saved only when you apply.`});
         return reviewEventOnly(candidate,values,mode,scope);
       }
       if(form.id==='planner-sleep-form') {
@@ -276,12 +387,13 @@ export function mountPlanner(container, {legacy, onRoutine, onNotice = () => {},
     }catch(error){report(error);}
   }
   function reviewEventOnly(candidate,values,mode,scope) {
-    pending={eventCandidate:candidate,original:state};
-    show('Review this appointment.',`<p><strong>${esc(values.title)}</strong><br>${dateLabel(values.date)} · ${times(values)}</p><p>${scope==='all'?'Applies to the whole series. ':''}${mode==='allow'?'Overlapping events will be kept and visibly marked.':mode==='replace'?'The selected occurrence will be replaced.':'Other events stay unchanged.'}</p><div class="dialog-actions">${action('close','Cancel')}${action('save-appointment','Save appointment','','btn btn-primary')}</div>`);
+    pending={eventCandidate:candidate,original:state,date:values.date};
+    const noun=values.kind==='session'?'work session':'commitment';
+    show(`Review this ${noun}.`,`<p><strong>${esc(values.title)}</strong><br>${dateLabel(values.date)}${values.slots?'':` · ${times(values)}`}</p>${values.slots?commitmentSummary(values.slots):''}${values.recurrence?`<p>${esc(recurrenceSummary(values))}</p>`:''}<p>${values.slots?'All weekly times will be saved together. ':scope==='all'?'Applies to the whole series. ':''}${mode==='allow'?'Overlapping events will be kept and visibly marked.':mode==='replace'?'The selected occurrence will be replaced.':'Other events stay unchanged.'}</p><div class="dialog-actions">${action('close','Cancel')}${action('save-appointment',`Save ${noun}`,'','btn btn-primary')}</div>`);
   }
   function onSaveAppointment(event) {
     if(!event.target.closest('[data-plan="save-appointment"]'))return;
-    try{if(!pending?.eventCandidate||state!==pending.original)throw new Error('Your plan changed. Review the appointment again.');const next=pending.eventCandidate;next.undo={...clone(state),undo:null};commit(next,'Appointment saved.');}catch(error){report(error);}
+    try{if(!pending?.eventCandidate||state!==pending.original)throw new Error('Your plan changed. Review the commitment again.');const next=pending.eventCandidate;selectedDate=pending.date;next.undo={...clone(state),undo:null};commit(next,'Changes saved.');}catch(error){report(error);}
   }
   function onDialogClose(){pending=null;importGeneration++;dialog.classList.remove('planner-dialog-wide');if(dialogFocus?.isConnected)dialogFocus.focus();else {const heading=container.querySelector('h1');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}}}
   function onStorage(event){if(event.key!==null&&event.key!=='betterday.planner.v2')return;const fresh=loadPlanner();state=fresh.state;loaded.error=fresh.error;close();render();onChange(state);onNotice(fresh.error||'Your planner changed in another tab. This view now shows the latest saved plan.');}

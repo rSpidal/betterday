@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyPlanner, saveTask, saveEvent, getEventsForDate, tasksForDate, previewReplan, applyReplan, undoLastChange, completeTask, updateTaskRemaining, deferTask, setWakeTime, updateSleep, migrateLegacy, replaceRoutine, assertPlanner, deleteEvent, isDate, addDays, weekStart, todayInZone, nowMinutesInZone } from '../js/planner.js';
+import { emptyPlanner, hasWeeklyRoutine, saveTask, saveEvent, getEventsForDate, tasksForDate, previewReplan, applyReplan, undoLastChange, completeTask, updateTaskRemaining, deferTask, setWakeTime, updateSleep, migrateLegacy, replaceRoutine, assertPlanner, deleteEvent, isDate, addDays, weekStart, todayInZone, nowMinutesInZone } from '../js/planner.js';
 import { generateSchedule } from '../js/scheduler.js';
 
 const DATE = '2026-11-02';
@@ -33,6 +33,58 @@ test('weekly legacy migration preserves every event, independent sleep overrides
   assert.deepEqual(source,original); assertPlanner(state);
   assert.deepEqual(getEventsForDate(state,DATE).map(e=>[e.title,e.start,e.end]),getEventsForDate(state,addDays(DATE,7)).map(e=>[e.title,e.start,e.end]));
   state.sleepOverrides[5].wake='10:00'; assert.equal(source.answers.sleep.overrides[5].wake,'09:00');
+});
+
+test('starting without a completed questionnaire keeps partial answers intact and opens an empty planner', () => {
+  const source=legacy();
+  source.draft=source.answers; source.answers=null; source.schedule=null; source.draftStep=1;
+  source.draft.sleep.wake='08:00'; source.draft.sleep.bed='';
+  const original=structuredClone(source);
+  const state=migrateLegacy(source,{startDate:DATE,timeZone:'America/New_York'});
+  assert.deepEqual(state,base());
+  assert.deepEqual(source,original);
+  assert.equal(source.draft.commitments[0].title,'Class');
+  assert.equal(source.draftStep,1);
+  assertPlanner(state);
+});
+
+test('drafts and manual-only planners do not count as a completed weekly routine', () => {
+  const draft={version:1,answers:null,schedule:null,draft:legacy().answers,draftStep:2};
+  const manual=task(event(base(),{recurrence:'weekly'}),{recurrence:{frequency:'weekly',days:[0],startDate:DATE}});
+  assert.equal(hasWeeklyRoutine(),false);
+  assert.equal(hasWeeklyRoutine(draft),false);
+  assert.equal(hasWeeklyRoutine(null,base()),false);
+  assert.equal(hasWeeklyRoutine(draft,manual),false);
+});
+
+test('restored planners retain weekly-routine detection without the original questionnaire', () => {
+  const source=legacy();
+  assert.equal(hasWeeklyRoutine(source),true);
+  const migrated=migrateLegacy(source,{startDate:DATE,timeZone:'America/New_York'});
+  assert.equal(hasWeeklyRoutine(null,JSON.parse(JSON.stringify(migrated))),true);
+  const replaced=replaceRoutine(base(),source,{startDate:DATE});
+  assert.equal(replaced.migratedFrom,undefined);
+  const restored=JSON.parse(JSON.stringify(replaced));
+  assert.equal(hasWeeklyRoutine(null,restored),true);
+  assert.equal(hasWeeklyRoutine(null,{...restored,events:restored.events.filter(event=>event.kind==='fixed'),tasks:[]}),true);
+  assert.equal(hasWeeklyRoutine(null,{...restored,events:[]}),true);
+  assert.equal(hasWeeklyRoutine(null,{...migrated,events:[],tasks:[]}),true);
+});
+
+test('completing the questionnaire after starting empty preserves manually added appointments and tasks', () => {
+  let state=task(event(base(),{id:'manual-event',title:'Dentist',start:'14:00',end:'15:00'}),{id:'manual-task',title:'Write essay',remaining:45,duration:45,priority:2});
+  state=updateTaskRemaining(state,'manual-task',25,{date:DATE});
+  const original=structuredClone(state), source=legacy(), originalSource=structuredClone(source);
+  const next=replaceRoutine(state,source,{startDate:DATE});
+  assert.deepEqual(next.events.find(e=>e.id==='manual-event'),original.events.find(e=>e.id==='manual-event'));
+  assert.deepEqual(next.tasks.find(t=>t.id==='manual-task'),original.tasks.find(t=>t.id==='manual-task'));
+  assert.equal(getEventsForDate(next,DATE).filter(e=>e.title==='Class').length,1);
+  assert.equal(getEventsForDate(next,addDays(DATE,7)).filter(e=>e.title==='Class').length,1);
+  assert.ok(next.tasks.some(t=>t.legacySourceId==='practice'));
+  assert.deepEqual(state,original); assert.deepEqual(source,originalSource);
+  const undone=undoLastChange(next);
+  assert.deepEqual(undone.events,original.events); assert.deepEqual(undone.tasks,original.tasks);
+  assertPlanner(next);
 });
 
 test('unplaced legacy intentions survive migration as unscheduled tasks', () => {
@@ -284,7 +336,7 @@ test('retaking questionnaire keeps currently edited series and their dated excep
  const date='2026-11-09';monday=getEventsForDate(state,date).find(e=>e.kind==='fixed');
  state=saveEvent(state,{...monday,title:'Special class',start:'11:00',end:'12:00'},{scope:'this',date,conflict:'allow'});
  const kept=routineCommitments(state,{date:DATE});
- assert.ok(kept.some(c=>c.start==='10:00'&&c._plannerMasterIds.length));
+ assert.ok(kept.some(c=>c.times.some(time=>time.start==='10:00'&&time._plannerMasterIds.length)));
  const original=legacy();original.answers.commitments=kept;original.schedule=generateSchedule(original.answers);
  const next=replaceRoutine(state,original,{startDate:date});
  assert.equal(getEventsForDate(next,date).filter(e=>e.kind==='fixed').length,1);

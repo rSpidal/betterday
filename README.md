@@ -44,13 +44,13 @@ Serve the folder over HTTP rather than opening `index.html` directly, because th
 
 ## Pages and behavior
 
-- **Home:** introduces the app. After a schedule is created, the main button opens the saved schedule.
-- **Questionnaire:** four steps for daily rhythm, fixed commitments, up to three initial personal activities, and review. Unfinished answers save as you go. Time fields use visible hour/minute dropdowns and AM/PM buttons.
-- **Dated planner setup:** choose a starting date and time zone to turn the weekly routine into dated commitments and recurring tasks. The original saved routine is retained.
-- **My schedule:** dated day/week views, appointments, flexible or locked work sessions, a ranked task list, and a Completed section.
+- **Home:** Start planning opens a blank-calendar setup without the questionnaire. A separate Use questionnaire option provides guided setup. Returning users open their saved schedule.
+- **Questionnaire (optional):** four steps for daily rhythm, fixed commitments, up to three initial personal activities, and review. Skip for now opens the planner while keeping unfinished answers. Completing the questionnaire later preserves manually added tasks and appointments. Time fields use visible hour/minute dropdowns and AM/PM buttons.
+- **Dated planner setup:** new users confirm their time zone and open an empty calendar, with adjustable default planning hours of 7 AM–11 PM. Users with a completed weekly routine choose its starting date before migration; the original routine is retained.
+- **My schedule:** dated day/week views, commitments, flexible or locked work sessions, a ranked task list, and a Completed section. Add commitment supports one-time, daily, or weekly repeats on selected weekdays. Weekly commitments support multiple day/time rows under one name, matching the questionnaire (for example, Mon/Wed 10–11 and Fri 10–10:50). Edit only one date or the whole commitment, review all rows before saving, and Undo the complete change.
 - **Sleep & wake:** set usual wake-up and bedtime ranges plus minimum sleep. Record an actual wake-up time with “I'm awake” and preview the revised day.
 - **Import / export:** exchange `.ics` calendar snapshots over a chosen date range, with an import preview, duplicate detection, and warnings before anything is added.
-- **Edit weekly routine:** retake the questionnaire to replace the generated routine from the current date while retaining user-added tasks, appointments, and prior dated history. The keep-commitments option reads the current migrated commitment series, including series edits and date exclusions. Separately added appointments remain dated planner items.
+- **Edit weekly routine:** retake the questionnaire to replace the generated routine from the current date while retaining user-added tasks, appointments, and prior dated history. The keep-previous-answers option starts with saved questionnaire answers and reads the current sleep preferences and migrated commitment series, including series edits and date exclusions. Separately added appointments remain dated planner items.
 
 The initial three-activity limit belongs to the questionnaire. Users can add additional tasks directly in the dated planner.
 

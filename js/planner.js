@@ -73,6 +73,14 @@ export function emptyPlanner({ startDate, timeZone = Intl.DateTimeFormat().resol
   if (!isDate(startDate)) throw new Error('Choose a valid starting date.');
   return { version: 2, revision: 0, timeZone, startDate, sleep: { wake: '07:00', bed: '23:00', wakeLatest: '07:00', bedLatest: '23:00', minSleep: 420 }, sleepOverrides: {}, tasks: [], events: [], wakeLog: {}, undo: null };
 }
+
+/** Restored planners can contain a weekly routine without its original questionnaire. */
+export function hasWeeklyRoutine(legacy, planner) {
+  return Boolean((legacy?.answers && legacy?.schedule) || planner?.migratedFrom
+    || (Array.isArray(planner?.events) && planner.events.some(event => typeof event.id === 'string' && event.id.startsWith('legacy-')))
+    || (Array.isArray(planner?.tasks) && planner.tasks.some(task => Object.hasOwn(task, 'legacySourceId'))));
+}
+
 function recurrenceValid(value, startDate, task = false) {
   return value === null || (record(value) && ['daily', 'weekly'].includes(value.frequency)
     && (value.days === undefined || validDays(value.days))
@@ -105,7 +113,7 @@ function validateEvent(event) {
     && ['fixed', 'session'].includes(event.kind) && (event.taskId === null || typeof event.taskId === 'string') && typeof event.locked === 'boolean'
     && recurrenceValid(event.recurrence, event.date) && Array.isArray(event.excludedDates) && event.excludedDates.every(isDate)
     && (event.allDay === undefined || typeof event.allDay === 'boolean')
-    && ['sourceUid','sourceOccurrence','importKey','routineMasterId','routineGroupId'].every(key => event[key] === undefined || typeof event[key] === 'string')
+    && ['sourceUid','sourceOccurrence','importKey','routineMasterId','routineGroupId','commitmentGroupId'].every(key => event[key] === undefined || typeof event[key] === 'string')
     && (event.routineSourceIds === undefined || (Array.isArray(event.routineSourceIds) && event.routineSourceIds.every(id => typeof id === 'string' && !!id)));
 }
 export function assertPlanner(state, checkUndo = true) {

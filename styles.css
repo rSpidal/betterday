@@ -76,3 +76,5 @@ dialog{border:1px solid var(--line);background:var(--paper);color:var(--ink);bor
 .commitment-times-toggle-icon{grid-column:2;grid-row:1/3;align-self:center;justify-self:center;font-size:18px;transition:transform .18s}
 .commitment-times-toggle[aria-expanded="true"] .commitment-times-toggle-icon{transform:rotate(180deg)}
 .commitment-times[hidden]{display:none}
+
+@media(max-width:360px){nav{gap:8px}}
