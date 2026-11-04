@@ -13,6 +13,7 @@ const icon = (name, size = 18) => {
     arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
     leaf: '<path d="M19 4C7 3 3 8 5 15c7 4 15 0 14-11Z"/><path d="m4 21 11-12"/>',
     close: '<path d="m6 6 12 12M6 18 18 6"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.leaf}</svg>`;
 };
@@ -73,7 +74,11 @@ function questionnaireCTA() {
 function header(route) {
   const { hasSchedule, needsRecovery } = scheduleStatus();
   const darkTheme = localStorage.getItem('betterday-theme') === 'dark';
-  $('#main-nav').innerHTML = `<a href="#home" ${route === 'home' ? 'aria-current="page"' : ''}>Home</a><a class="nav-questionnaire" href="#questionnaire" data-action="app-questionnaire" ${route === 'questionnaire' ? 'aria-current="page"' : ''}>${state.draft ? 'Continue setup' : 'Questionnaire'}</a><a class="nav-cta" href="#schedule" ${route === 'schedule' ? 'aria-current="page"' : ''}>${needsRecovery ? 'Recover planner' : hasSchedule ? 'My schedule' : 'Get started'}</a><button class="theme-toggle" type="button" data-action="app-theme-toggle" aria-pressed="${darkTheme}" aria-label="Switch to ${darkTheme ? 'light' : 'dark'} color scheme"><span aria-hidden="true">${darkTheme ? '☀' : '☾'}</span><span class="theme-toggle-label">${darkTheme ? 'Light' : 'Dark'} mode</span></button>`;
+  $('#main-nav').innerHTML = `<button class="menu-toggle" id="menu-toggle" type="button" data-action="app-menu-open" aria-haspopup="dialog" aria-controls="side-menu" aria-expanded="false"><span>Menu</span>${icon('menu', 20)}</button><dialog class="side-menu" id="side-menu" aria-labelledby="side-menu-title"><div class="side-menu-head"><h2 id="side-menu-title">Menu</h2><button class="icon-btn" type="button" data-action="app-menu-close" aria-label="Close menu">${icon('close', 18)}</button></div><div class="side-menu-links"><a href="#home" ${route === 'home' ? 'aria-current="page"' : ''}>Home</a><a class="nav-questionnaire" href="#questionnaire" data-action="app-questionnaire" ${route === 'questionnaire' ? 'aria-current="page"' : ''}>${state.draft ? 'Continue setup' : 'Questionnaire'}</a><a class="nav-cta" href="#schedule" ${route === 'schedule' ? 'aria-current="page"' : ''}>${needsRecovery ? 'Recover planner' : hasSchedule ? 'My schedule' : 'Get started'}</a></div><button class="theme-toggle" type="button" data-action="app-theme-toggle" aria-pressed="${darkTheme}" aria-label="Toggle dark mode"><span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span><span>Dark mode</span></button></dialog>`;
+  const sideMenu = $('#side-menu');
+  const menuToggle = $('#menu-toggle');
+  sideMenu.addEventListener('close', () => menuToggle.setAttribute('aria-expanded', 'false'));
+  sideMenu.addEventListener('click', event => { if (event.target === sideMenu) sideMenu.close(); });
 }
 function primaryCTA(extra = '') {
   const { hasSchedule, needsRecovery } = scheduleStatus();
@@ -195,16 +200,25 @@ function retakeDialog(force = false) {
   showDialog(`${dialogHead('Edit your routine.')}<p>Your last questionnaire answers can be filled in so you can update your schedule without starting over. Your current schedule stays in place until you save the changes.</p>${state.draft ? '<p>You have an unfinished questionnaire. Continuing will replace those draft answers.</p>' : ''}<label class="check-label"><input id="keep-previous-answers" type="checkbox" checked>Keep all my previous answers</label><p class="dialog-help">This includes your daily rhythm, commitments, activities, and preferences. Dated appointments and tasks in your planner stay as they are.</p><div class="dialog-actions"><button class="btn btn-secondary" data-action="app-close">Cancel</button><button class="btn btn-primary" data-action="app-confirm-retake">Continue to questionnaire ${icon('arrow', 16)}</button></div>`);
 }
 document.addEventListener('click', event => {
+  const sideMenuLink = event.target.closest('#side-menu a');
+  if (sideMenuLink) $('#side-menu')?.close();
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
   if (!action?.startsWith('app-')) return;
   event.preventDefault();
-  if (action === 'app-theme-toggle') {
+  if (action === 'app-menu-open') {
+    const sideMenu = $('#side-menu');
+    sideMenu.showModal();
+    button.setAttribute('aria-expanded', 'true');
+    sideMenu.querySelector('[data-action="app-menu-close"]').focus();
+  } else if (action === 'app-menu-close') {
+    $('#side-menu').close();
+  } else if (action === 'app-theme-toggle') {
     const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('betterday-theme', theme);
     applyTheme(theme);
-    header(routeName());
+    button.setAttribute('aria-pressed', String(theme === 'dark'));
   } else if (action === 'app-questionnaire') openQuestionnaire();
   else if (action === 'app-how') $('#how-it-works')?.scrollIntoView({ behavior: 'smooth' });
   else if (action === 'app-retake') retakeDialog();
