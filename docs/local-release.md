@@ -94,3 +94,19 @@ Screenshots use synthetic QA data: [dated planner](screenshots/local-planner.jpg
 ## Next validation gate
 
 The primary local workflows have been validated and are ready for the user's review. Repeat the original time-entry user test and use the remaining checklist for broader coverage before publication. Keep this version local until the user chooses publication. External services and provider credentials are separate future setup work, not requirements for testing this local planning loop.
+
+
+## Integrated calendar import — November 3, 2026
+
+Issue #5 adds first-class import alongside blank setup and the optional questionnaire. The local implementation opens import directly from Home, lets users confirm a file, range, and initial time zone, previews events and skipped items, then creates or updates the planner only on Apply. Export remains available in the planner footer. Account connections remain deferred.
+
+Validation: 139 automated tests pass, including six new integration tests for first-time import, partial drafts, completed routines, existing task/history preservation, duplicate-only imports, and invalid files. Browser checks with synthetic `.ics` data verify missing-file/date errors, cancellation without creating a planner, change-file/date navigation, first import, reload persistence, duplicate prevention, empty ranges, Undo, and 320px/390px layouts without horizontal overflow. Real provider-account export/import interoperability remains unverified.
+
+### November 4 review refinements
+- Added task drag handles with drop indicators, scrolling, Escape cancellation, saved priorities, and Undo; retained arrow controls. Tested dragging, reload persistence, arrows, and Undo with synthetic browser data.
+- Moved the Smart schedule bar below the calendar; simplified its copy and Preview button and removed the actual-wake check-in UI.
+- Added ranking tests for multi-position moves, tied priorities, hidden tasks, invalid moves, and Undo. All 141 tests pass.
+
+### Editable planning preview
+- Manual block times and individual removal, 90-minute default sleep buffers with explicit override, and a wake-range readiness delay. Preferences apply to this planner session.
+- Browser-tested edited time application, block removal without task deletion, and Undo on synthetic data. Six new tests cover buffers, readiness, current-time checks, conflicts, removal, Undo, and overnight boundaries; 147 tests pass.

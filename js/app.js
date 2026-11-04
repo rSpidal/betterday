@@ -2,7 +2,7 @@ import { DAYS, formatTime, generateSchedule } from './scheduler.js?v=20261103.3'
 import { mountQuestionnaire } from './questionnaire.js?v=20261103.7';
 import { blankAnswers, loadState, saveState } from './storage.js?v=20261103.3';
 import { bindTimePickers } from './time-picker.js?v=20261102.2';
-import { mountPlanner } from './planner-view.js?v=20261103.10';
+import { mountPlanner } from './planner-view.js?v=20261104.10';
 import { loadPlanner, saveRoutineReplacement } from './planner-storage.js?v=20261102';
 import { replaceRoutine, todayInZone, getEventsForDate, routineCommitments, hasWeeklyRoutine } from './planner.js?v=20261103.10';
 
@@ -55,7 +55,7 @@ function toast(message) {
 }
 function routeName() {
   const hash = location.hash.slice(1);
-  return ['home', 'questionnaire', 'schedule'].includes(hash) ? hash : 'home';
+  return ['home', 'questionnaire', 'schedule', 'import'].includes(hash) ? hash : 'home';
 }
 function navigate(route) {
   if (location.hash === `#${route}`) render();
@@ -74,7 +74,7 @@ function questionnaireCTA() {
 function header(route) {
   const { hasSchedule, needsRecovery } = scheduleStatus();
   const darkTheme = localStorage.getItem('betterday-theme') === 'dark';
-  $('#main-nav').innerHTML = `<button class="menu-toggle" id="menu-toggle" type="button" data-action="app-menu-open" aria-haspopup="dialog" aria-controls="side-menu" aria-expanded="false"><span>Menu</span>${icon('menu', 20)}</button><dialog class="side-menu" id="side-menu" aria-labelledby="side-menu-title"><div class="side-menu-head"><h2 id="side-menu-title">Menu</h2><button class="icon-btn" type="button" data-action="app-menu-close" aria-label="Close menu">${icon('close', 18)}</button></div><div class="side-menu-links"><a href="#home" ${route === 'home' ? 'aria-current="page"' : ''}>Home</a><a class="nav-questionnaire" href="#questionnaire" data-action="app-questionnaire" ${route === 'questionnaire' ? 'aria-current="page"' : ''}>${state.draft ? 'Continue setup' : 'Questionnaire'}</a><a class="nav-cta" href="#schedule" ${route === 'schedule' ? 'aria-current="page"' : ''}>${needsRecovery ? 'Recover planner' : hasSchedule ? 'My schedule' : 'Get started'}</a></div><button class="theme-toggle" type="button" data-action="app-theme-toggle" aria-pressed="${darkTheme}" aria-label="Toggle dark mode"><span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span><span>Dark mode</span></button></dialog>`;
+  $('#main-nav').innerHTML = `<button class="menu-toggle" id="menu-toggle" type="button" data-action="app-menu-open" aria-haspopup="dialog" aria-controls="side-menu" aria-expanded="false"><span>Menu</span>${icon('menu', 20)}</button><dialog class="side-menu" id="side-menu" aria-labelledby="side-menu-title"><div class="side-menu-head"><h2 id="side-menu-title">Menu</h2><button class="icon-btn" type="button" data-action="app-menu-close" aria-label="Close menu">${icon('close', 18)}</button></div><div class="side-menu-links"><a href="#home" ${route === 'home' ? 'aria-current="page"' : ''}>Home</a><a class="nav-cta" href="#schedule" ${['schedule','import'].includes(route) ? 'aria-current="page"' : ''}>${needsRecovery ? 'Recover planner' : hasSchedule ? 'My schedule' : 'Get started'}</a></div><button class="theme-toggle" type="button" data-action="app-theme-toggle" aria-pressed="${darkTheme}" aria-label="Toggle dark mode"><span class="theme-toggle-track" aria-hidden="true"><span class="theme-toggle-thumb"></span></span><span>Dark mode</span></button></dialog>`;
   const sideMenu = $('#side-menu');
   const menuToggle = $('#menu-toggle');
   sideMenu.addEventListener('close', () => menuToggle.setAttribute('aria-expanded', 'false'));
@@ -82,7 +82,7 @@ function header(route) {
 }
 function primaryCTA(extra = '') {
   const { hasSchedule, needsRecovery } = scheduleStatus();
-  return `<a class="btn btn-primary ${extra}" href="#schedule">${needsRecovery ? 'Recover my planner' : hasSchedule ? 'View my schedule' : 'Start planning'}${icon('arrow')}</a>`;
+  return `<a class="btn ${hasSchedule || needsRecovery ? 'btn-primary' : 'btn-secondary'} ${extra}" href="${hasSchedule || needsRecovery ? '#schedule' : '#import'}">${needsRecovery ? 'Recover my planner' : hasSchedule ? 'View my schedule' : 'Import a calendar'}${hasSchedule || needsRecovery ? icon('arrow') : ''}</a>`;
 }
 function homePreview() {
   const sample = [
@@ -101,7 +101,7 @@ function homePreview() {
 }
 function renderHome() {
   const { hasSchedule, needsRecovery } = scheduleStatus();
-  main.innerHTML = `<div class="home"><section class="hero"><div class="hero-copy"><p class="eyebrow"><span class="eyebrow-dot"></span>YOUR BETTER DAY STARTS NOW</p><h1>A little structure.<br>More room<br><em>for you.</em></h1><p class="hero-description">Make time for what matters. Set your priorities, find space around your commitments, and adjust your plan as the day unfolds.</p><div class="hero-actions">${primaryCTA()}${!hasRoutine() && !needsRecovery ? questionnaireCTA() : `<a class="btn btn-quiet" href="#how-it-works" data-action="app-how">How it works ${icon('arrow', 15)}</a>`}</div></div>${homePreview()}</section><section id="how-it-works" aria-labelledby="how-heading"><div class="intro-strip"><h2 id="how-heading">Better days, by design.</h2><span class="rule"></span></div><div class="how-grid"><article class="how-item"><span class="how-number">01</span><h3>Start with your real life.</h3><p>Start with a blank calendar, or use the optional questionnaire to set up your usual week.</p></article><article class="how-item"><span class="how-number">02</span><h3>Make time for what matters.</h3><p>Choose a few things you’d like more room for. We’ll find space around your schedule.</p></article><article class="how-item"><span class="how-number">03</span><h3>Find your own rhythm.</h3><p>Preview a plan for your tasks. As life changes, adjust the rest of your day—with you in control.</p></article></div></section><section class="home-bottom"><div><h2>${needsRecovery ? 'Let’s recover your saved plan.' : hasSchedule ? 'Your next better day is waiting.' : 'A calmer week starts here.'}</h2>${hasSchedule && !needsRecovery ? '<p>Your plan is saved in this browser. Pick up where you left off.</p>' : ''}</div><div>${primaryCTA()}${!hasSchedule && !needsRecovery ? '<p><a class="text-button" href="#schedule">Restore a saved planner</a></p>' : ''}</div></section></div>`;
+  main.innerHTML = `<div class="home"><section class="hero"><div class="hero-copy"><p class="eyebrow"><span class="eyebrow-dot"></span>YOUR BETTER DAY STARTS NOW</p><h1>A little structure.<br>More room<br><em>for you.</em></h1><p class="hero-description">Make time for what matters. Set your priorities, find space around your commitments, and adjust your plan as the day unfolds.</p><div class="hero-actions">${primaryCTA()}${!hasSchedule && !needsRecovery ? '<a class="btn btn-secondary" href="#schedule">Start blank</a>' : ''}${!hasRoutine() && !needsRecovery ? questionnaireCTA() : `<a class="btn btn-quiet" href="#how-it-works" data-action="app-how">How it works ${icon('arrow', 15)}</a>`}</div></div>${homePreview()}</section><section id="how-it-works" aria-labelledby="how-heading"><div class="intro-strip"><h2 id="how-heading">Better days, by design.</h2><span class="rule"></span></div><div class="how-grid"><article class="how-item"><span class="how-number">01</span><h3>Start with your real life.</h3><p>Bring in a calendar, start blank, or use the questionnaire to set up your usual week.</p></article><article class="how-item"><span class="how-number">02</span><h3>Make time for what matters.</h3><p>Choose a few things you’d like more room for. We’ll find space around your schedule.</p></article><article class="how-item"><span class="how-number">03</span><h3>Find your own rhythm.</h3><p>Preview a plan for your tasks. As life changes, adjust the rest of your day—with you in control.</p></article></div></section><section class="home-bottom"><div><h2>${needsRecovery ? 'Let’s recover your saved plan.' : hasSchedule ? 'Your next better day is waiting.' : 'A calmer week starts here.'}</h2>${hasSchedule && !needsRecovery ? '<p>Your plan is saved in this browser. Pick up where you left off.</p>' : ''}</div><div>${primaryCTA()}${!hasSchedule && !needsRecovery ? '<p><a class="text-button" href="#schedule">Restore a saved planner</a></p>' : ''}</div></section></div>`;
 }
 function openQuestionnaire() {
   if (state.draft) return navigate('questionnaire');
@@ -157,6 +157,13 @@ function renderSchedule() {
   // The dated planner owns migration, empty setup, backup restore, and recovery.
   cleanupPlanner = mountPlanner(main, {
     legacy: state,
+    startImport: routeName() === 'import',
+    onImportClose: () => {
+      if (routeName() !== 'import') return;
+      history.replaceState(null, '', location.pathname + location.search + '#schedule');
+      document.title = 'My schedule — BetterDay';
+      header('schedule');
+    },
     onRoutine: () => openQuestionnaire(),
     onNotice: storageNotice,
     onToast: toast,
@@ -178,9 +185,9 @@ function render() {
   const route = routeName();
   header(route);
   if (route === 'questionnaire') renderQuestionnaire();
-  else if (route === 'schedule') renderSchedule();
+  else if (route === 'schedule' || route === 'import') renderSchedule();
   else renderHome();
-  document.title = `${route === 'questionnaire' ? 'Create your routine' : route === 'schedule' ? 'My schedule' : 'Your better day starts now'} — BetterDay`;
+  document.title = `${route === 'questionnaire' ? 'Create your routine' : route === 'import' ? 'Import calendar' : route === 'schedule' ? 'My schedule' : 'Your better day starts now'} — BetterDay`;
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 function showDialog(content) {

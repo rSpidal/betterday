@@ -154,6 +154,21 @@ export function tasksForDate(state, date, { includeCompleted = false } = {}) {
     return { ...copy(task), remaining, status, occurrenceDate: date, eligible: status === 'active' && remaining > 0 && !reason, reason };
   }).filter(task => includeCompleted || task.status !== 'completed').sort((a, b) => a.priority - b.priority || (a.deadline || '9999').localeCompare(b.deadline || '9999') || a.id.localeCompare(b.id));
 }
+/** Move an active task within the displayed ranking, preserving hidden task slots. */
+export function reorderTask(state, date, id, target) {
+  const visible = tasksForDate(state, date);
+  const from = visible.findIndex(task => task.id === id);
+  if (from < 0 || !Number.isInteger(target) || target < 0 || target >= visible.length) throw new Error('Choose a valid task position.');
+  if (from === target) return state;
+  const ids = new Set(visible.map(task => task.id));
+  const [moved] = visible.splice(from, 1); visible.splice(target, 0, moved);
+  const next = copy(state);
+  const ordered = [...next.tasks].sort((a,b) => a.priority-b.priority || (a.deadline||'9999').localeCompare(b.deadline||'9999') || a.id.localeCompare(b.id));
+  const byId = new Map(next.tasks.map(task => [task.id, task]));
+  let index = 0;
+  ordered.forEach((task, rank) => { (ids.has(task.id) ? byId.get(visible[index++].id) : task).priority = rank + 1; });
+  return changed(state, next);
+}
 export function sleepForDate(state, date) {
   const override = state.sleepOverrides[weekday(date)];
   return { ...state.sleep, ...(override || {}), ...(override ? { wakeLatest: override.wakeLatest || override.wake, bedLatest: override.bedLatest || override.bed } : {}) };
@@ -416,14 +431,42 @@ function findSlot(gaps, duration, old, preference) {
   for (const [left, right] of gaps) if (left + duration <= right) return left;
   return null;
 }
-export function previewReplan(state, { date = todayInZone(state.timeZone), nowMinutes = 0 } = {}) {
+export function taskWindows(state, date, bufferMinutes = 90) {
+  if (!integer(bufferMinutes,0,180)) throw new Error('Choose a valid sleep buffer.');
+  const sleep = sleepForDate(state,date);
+  const wake = toMinutes(state.wakeLog[date] || sleep.wakeLatest || sleep.wake);
+  const bed = toMinutes(sleep.bed);
+  return awakeWindows(state,date).map(([left,right]) => [left === wake ? left+bufferMinutes : left, right === bed ? right-bufferMinutes : right]).filter(([left,right]) => right>left);
+}
+/** Validate user edits without changing tasks or the original saved plan. */
+export function customizePreview(state, preview, edits, nowMinutes = preview.nowMinutes) {
+  const next=copy(preview), windows=taskWindows(state,preview.date,preview.bufferMinutes || 0);
+  next.events=preview.events.flatMap(event => {
+    const edit=edits[event.id];
+    if(edit?.remove) return [];
+    const updated={...copy(event),...(edit ? {start:edit.start,end:edit.end} : {})};
+    const start=toMinutes(updated.start),end=toMinutes(updated.end);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(updated.start) || (!/^([01]\d|2[0-3]):[0-5]\d$/.test(updated.end) && updated.end !== '24:00') || end<=start) throw new Error(`${event.title}: choose a valid start and end time.`);
+    if(start<Math.max(nowMinutes,preview.nowMinutes)) throw new Error(`${event.title}: choose a time after now and your ready time.`);
+    if(end-start>toMinutes(event.end)-toMinutes(event.start)) throw new Error(`${event.title}: this block cannot exceed its proposed duration.`);
+    if(!windows.some(([left,right])=>start>=left&&end<=right)) throw new Error(`${event.title}: keep this block outside sleep and its buffer, or override the buffer.`);
+    if(clockChangeWindows(preview.date,state.timeZone).some(([left,right])=>start<right&&end>left)) throw new Error('Choose a time outside the clock-change hour.');
+    return [updated];
+  });
+  for(const event of next.events) {
+    if([...next.preserved,...next.events].some(other=>other!==event&&toMinutes(event.start)<toMinutes(other.end)&&toMinutes(event.end)>toMinutes(other.start))) throw new Error(`${event.title}: this time overlaps another block.`);
+  }
+  return next;
+}
+export function previewReplan(state, { date = todayInZone(state.timeZone), nowMinutes = 0, bufferMinutes = 0, readyAt = 0 } = {}) {
   assertPlanner(state);
-  if (!isDate(date) || !integer(nowMinutes, 0, 1440)) throw new Error('Choose a valid date and current time for replanning.');
+  if (!isDate(date) || !integer(nowMinutes, 0, 1440) || !integer(readyAt,0,1440)) throw new Error('Choose a valid date and current time for replanning.');
   const existing = getEventsForDate(state, date), tasks = tasksForDate(state, date), byId = new Map(tasks.map(task => [task.id, task]));
   const movable = existing.filter(event => event.kind === 'session' && !event.locked && toMinutes(event.start) >= nowMinutes && byId.has(event.taskId));
   const preserved = existing.filter(event => !movable.includes(event));
   const events = [], unplaced = [], changes = [], notes = [], extraRemovals = [];
-  let windows = awakeWindows(state, date);
+  let windows = taskWindows(state, date, bufferMinutes);
+  nowMinutes = Math.max(nowMinutes, readyAt);
   const clockChanges = clockChangeWindows(date,state.timeZone);
   for (const [blockedStart,blockedEnd] of clockChanges) windows = windows.flatMap(([start,end]) => {
     if (end<=blockedStart || start>=blockedEnd) return [[start,end]];
@@ -480,7 +523,7 @@ export function previewReplan(state, { date = todayInZone(state.timeZone), nowMi
   const sleep = sleepForDate(state, date), actualWake = state.wakeLog[date];
   if (actualWake && ((toMinutes(actualWake) - toMinutes(sleep.bedLatest || sleep.bed) + 1440) % 1440) < sleep.minSleep) notes.push('Your recorded wake-up leaves less than your minimum sleep based on your usual bedtime. Your bedtime has not been pushed later.');
   const removals = [...movable, ...extraRemovals].map(event => ({ id: event.id, date: event.date }));
-  return { date, nowMinutes, baseRevision: state.revision, baseFingerprint: fingerprint(state), events, removeIds: removals.map(event => event.id), removals, changes, unplaced, notes, preserved };
+  return { date, nowMinutes, bufferMinutes, baseRevision: state.revision, baseFingerprint: fingerprint(state), events, removeIds: removals.map(event => event.id), removals, changes, unplaced, notes, preserved };
 }
 export function applyReplan(state, preview, { undoState = state } = {}) {
   if (!preview || preview.baseRevision !== state.revision || preview.baseFingerprint !== fingerprint(state)) throw new Error('Your plan changed since this preview. Preview it again before applying.');

@@ -15,7 +15,7 @@
 
 Your better day starts now. BetterDay is an active day planner: capture commitments and tasks, preview a realistic plan, and adjust the remaining day as circumstances change. Users stay in control through Preview, Apply, and Undo.
 
-The local release adds dated schedules, ranked tasks, completion history, wake-up adjustments, and calendar-file exchange to the original weekly-routine questionnaire. See the [product vision](docs/product-vision.md), [implementation roadmap](docs/user-testing-roadmap.md), and [local release checklist](docs/local-release.md).
+The local release adds dated schedules, ranked tasks, completion history, sleep preferences, and calendar-file exchange to the original weekly-routine questionnaire. See the [product vision](docs/product-vision.md), [implementation roadmap](docs/user-testing-roadmap.md), and [local release checklist](docs/local-release.md).
 
 The app uses plain HTML, CSS, and JavaScript. It needs no build step, dependency installation, account, database, API key, or external service. All planning and file exchange happen in the browser.
 
@@ -23,7 +23,7 @@ The app uses plain HTML, CSS, and JavaScript. It needs no build step, dependency
 
 GitHub Pages: **https://rspidal.github.io/betterday/**
 
-**This release is local and has not been published.** The public site still serves the October 30, 2026 weekly-routine version, commit `50e490d`. The features described below refer to the current local source, not the public deployment.
+The `main` branch is published on GitHub Pages. Local edits become public only after they are committed, pushed, and the deployment finishes.
 
 GitHub Pages publishes the root of the `main` branch. Pushing changes to `main` triggers a new deployment; the Actions tab shows its progress. The `.nojekyll` file serves the existing HTML, CSS, and JavaScript directly.
 
@@ -44,12 +44,13 @@ Serve the folder over HTTP rather than opening `index.html` directly, because th
 
 ## Pages and behavior
 
-- **Home:** Start planning opens a blank-calendar setup without the questionnaire. A separate Use questionnaire option provides guided setup. Returning users open their saved schedule.
+- **Home:** new users can Import a calendar, Start blank, or Use questionnaire. Import opens the file chooser and review flow immediately, without requiring a saved planner. Returning users open their saved schedule.
 - **Questionnaire (optional):** four steps for daily rhythm, fixed commitments, up to three initial personal activities, and review. Skip for now opens the planner while keeping unfinished answers. Completing the questionnaire later preserves manually added tasks and appointments. Time fields use visible hour/minute dropdowns and AM/PM buttons.
-- **Dated planner setup:** new users confirm their time zone and open an empty calendar, with adjustable default planning hours of 7 AM–11 PM. Users with a completed weekly routine choose its starting date before migration; the original routine is retained.
-- **My schedule:** dated day/week views, commitments, flexible or locked work sessions, a ranked task list, and a Completed section. Add commitment supports one-time, daily, or weekly repeats on selected weekdays. Weekly commitments support multiple day/time rows under one name, matching the questionnaire (for example, Mon/Wed 10–11 and Fri 10–10:50). Edit only one date or the whole commitment, review all rows before saving, and Undo the complete change.
-- **Sleep & wake:** set usual wake-up and bedtime ranges plus minimum sleep. Record an actual wake-up time with “I'm awake” and preview the revised day.
-- **Import / export:** exchange `.ics` calendar snapshots over a chosen date range, with an import preview, duplicate detection, and warnings before anything is added.
+- **Dated planner setup:** importing a calendar is offered first; new users can also confirm their time zone and open an empty calendar, with adjustable default planning hours of 7 AM–11 PM. Users with a completed weekly routine choose its starting date before migration; the original routine is retained.
+- **My schedule:** dated day/week views with previous/next week navigation across months and years, a visible week range, and a date picker for direct jumps. Day view arrows move one day. Includes commitments, flexible or locked work sessions, a ranked task list, and a Completed section. Add commitment supports one-time, daily, or weekly repeats on selected weekdays. Weekly commitments support multiple day/time rows under one name, matching the questionnaire (for example, Mon/Wed 10–11 and Fri 10–10:50). Edit only one date or the whole commitment, review all rows before saving, and Undo the complete change.
+- **Sleep & wake:** set usual wake-up and bedtime ranges plus minimum sleep.
+- **Calendar import:** available from Home, initial setup, and the planner toolbar. Choose an `.ics` file, a date window (90 days by default), and a time zone for a new planner. Export guidance covers Google Calendar and Apple Calendar. Review the filename, range, events, duplicate counts, and unsupported-item notes before saving. Change the file or dates without starting over; Cancel saves nothing, and Undo removes the import. Existing tasks, commitments, and questionnaire answers stay intact.
+- **Calendar export:** download a dated `.ics` snapshot from Export calendar in the planner footer.
 - **Edit weekly routine:** retake the questionnaire to replace the generated routine from the current date while retaining user-added tasks, appointments, and prior dated history. The keep-previous-answers option starts with saved questionnaire answers and reads the current sleep preferences and migrated commitment series, including series edits and date exclusions. Separately added appointments remain dated planner items.
 
 The initial three-activity limit belongs to the questionnaire. Users can add additional tasks directly in the dated planner.
@@ -62,7 +63,7 @@ An end of midnight means the end of the selected date and is stored as `24:00`. 
 
 ## Tasks and dynamic planning
 
-Tasks have a name, ranked priority, remaining minutes, optional deadline, and optional daily/weekly recurrence. Users can reorder priorities, update remaining effort, defer work, or mark it complete. Recurring tasks track progress and completion separately for each occurrence date. Changing a task's repeat pattern preserves recorded completion history and removes obsolete future flexible sessions; Undo can restore the change.
+Tasks have a name, ranked priority, remaining minutes, optional deadline, and optional daily/weekly recurrence. Users can drag task handles or use up/down arrows to reorder priorities, update remaining effort, defer work, or mark it complete. Recurring tasks track progress and completion separately for each occurrence date. Changing a task's repeat pattern preserves recorded completion history and removes obsolete future flexible sessions; Undo can restore the change.
 
 “Can split into shorter work sessions” lets the planner use multiple gaps while respecting the task's minimum session length. Otherwise, the task needs one uninterrupted block.
 
@@ -115,6 +116,7 @@ Retaking the questionnaire saves the weekly routine and dated planner together. 
 - `js/planner.js`: dated task/event model, migration, scheduling, progress, and undo.
 - `js/planner-storage.js`: validated planner persistence, coordinated routine replacement, and recovery helpers.
 - `js/calendar-exchange.js`: bounded, local `.ics` parsing and export.
+- `js/calendar-import.js`: pure first-time/existing-planner import preparation, preserving the prior plan for Undo.
 - `js/scheduler.js` and `js/storage.js`: original weekly-routine generation, validation, and storage.
 - `docs/questionnaire.md`: questionnaire outline.
 - `docs/local-release.md`: implemented milestones, automated verification, completed browser checks, and remaining coverage limits.
@@ -131,4 +133,6 @@ With a current Node.js installation:
 npm test
 ```
 
-No dependency installation is required. On November 2, 2026, **all 100 tests passed**. They cover the original routine and the new time controls, dated planner, migration/recovery, task progress and repeat-pattern changes, preview/apply/undo, recurrence, sleep, daylight-saving boundaries, and calendar-file exchange. Browser checks have verified the primary local planning, questionnaire-retake, calendar-file, and backup-restore workflows, including 320px and 390px layouts. See the [local release checklist](docs/local-release.md) for exact coverage and remaining validation.
+No dependency installation is required. On November 4, 2026, **all 147 tests passed**. They cover the original routine and the new time controls, dated planner, migration/recovery, task progress and repeat-pattern changes, preview/apply/undo, recurrence, sleep, daylight-saving boundaries, and calendar-file exchange. Browser checks have verified the primary local planning, questionnaire-retake, calendar-file, and backup-restore workflows, including 320px and 390px layouts. See the [local release checklist](docs/local-release.md) for exact coverage and remaining validation.
+
+Task previews allow manual start/end times and removal of individual blocks. Smart scheduling defaults to 90 minutes after the latest wake-up and before the earliest bedtime, with an override in the preview. During the wake-up range, Time before tasks opens a readiness delay control. Preview edits validate overlaps and the current clock before applying.
