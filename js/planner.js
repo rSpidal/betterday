@@ -391,15 +391,25 @@ export function setWakeTime(state, date, time) {
   if (!isDate(date) || !validClock(time)) throw new Error('Choose a valid wake-up date and time.');
   const next = copy(state); next.wakeLog[date] = time; return changed(state, next);
 }
-export function updateSleep(state, settings) {
-  const next = copy(state); next.sleep = { ...next.sleep, ...copy(settings) };
-  if (!sleepValid(next.sleep)) throw new Error('Check your wake-up and bedtime ranges.');
-  const { wake, bedLatest, bed, minSleep } = next.sleep;
+function validateSleepWindow(sleep) {
+  if (!sleepValid(sleep)) throw new Error('Check your wake-up and bedtime ranges.');
+  const { wake, bedLatest, bed, minSleep } = sleep;
   const bedtimeSpan = (toMinutes(bedLatest || bed) - toMinutes(bed) + 1440) % 1440;
   const sleepMinutes = ((toMinutes(wake) - toMinutes(bed) + 1440) % 1440) - bedtimeSpan;
-  const wakeSpan = toMinutes(next.sleep.wakeLatest || wake) - toMinutes(wake);
+  const wakeSpan = toMinutes(sleep.wakeLatest || wake) - toMinutes(wake);
   if (wakeSpan >= (toMinutes(bed) - toMinutes(wake) + 1440) % 1440) throw new Error('Your latest wake-up must leave awake time before bedtime.');
   if (sleepMinutes < minSleep) throw new Error('These ranges leave less than your minimum sleep. Move bedtime earlier or wake-up later.');
+}
+export function updateSleep(state, settings) {
+  const { sleepOverrides, ...sleepSettings } = settings;
+  const next = copy(state); next.sleep = { ...next.sleep, ...copy(sleepSettings) };
+  if (sleepOverrides !== undefined) next.sleepOverrides = copy(sleepOverrides);
+  validateSleepWindow(next.sleep);
+  if (!record(next.sleepOverrides) || !Object.entries(next.sleepOverrides).every(([day, value]) => /^[0-6]$/.test(day) && sleepValid(value))) throw new Error('Check the day-specific wake-up and bedtime ranges.');
+  for (const override of Object.values(next.sleepOverrides)) {
+    const daySleep = { ...next.sleep, ...override, wakeLatest: override.wakeLatest || override.wake, bedLatest: override.bedLatest || override.bed };
+    validateSleepWindow(daySleep);
+  }
   return changed(state, next);
 }
 export function undoLastChange(state) {

@@ -1,4 +1,4 @@
-import * as P from './planner.js?v=20261104.5';
+import * as P from './planner.js?v=20261104.7';
 import { getCommitmentDetails, saveWeeklyCommitment, deleteCommitmentGroup, firstCommitmentDate } from './commitments.js?v=20261103.10';
 import { loadPlanner, savePlanner, saveMigratedPlanner, importPlannerBackup } from './planner-storage.js?v=20261102';
 import { formatTime, toMinutes, DAYS } from './scheduler.js';
@@ -279,8 +279,17 @@ export function mountPlanner(container, {legacy, startImport = false, onImportCl
       ${preview.notes.map(note=>`<p>${esc(note)}</p>`).join('')}<p class="dialog-help">Times use ${esc(state.timeZone)}. You may shorten a block; unfinished time stays on the task. Nothing changes until you apply. Undo restores the previous plan.</p><div class="dialog-actions">${action('close','Keep current plan')}${action('apply','Apply this plan','','btn btn-primary')}</div>`,true);
   }
   function sleepForm() {
-    const s = state.sleep;
-    show('Your day has a rhythm.',`<form id="planner-sleep-form"><p>Give your usual wake-up and bedtime ranges. We plan from the latest wake-up to the earliest bedtime to leave room for your sleep routine.</p><div class="form-grid">${renderTimePicker({label:'Earliest wake-up',value:s.wake,name:'wake'})}${renderTimePicker({label:'Latest wake-up',value:s.wakeLatest||s.wake,name:'wakeLatest'})}</div><div class="form-grid">${renderTimePicker({label:'Earliest bedtime',value:s.bed,name:'bed'})}${renderTimePicker({label:'Latest bedtime',value:s.bedLatest||s.bed,name:'bedLatest'})}</div>${field('Minimum sleep (hours)','minSleep',s.minSleep/60,'number','min="0.5" max="23" step="0.5" required')}${Object.keys(state.sleepOverrides).length?'<label class="checkbox-label"><input type="checkbox" name="clearOverrides">Use these ranges every day, replacing day-specific sleep times</label>':''}<p class="dialog-help">Bedtime ranges may cross midnight. The minimum sleep you choose stays protected.</p><div class="dialog-actions">${action('close','Cancel')}<button type="submit" class="btn btn-primary">Save sleep preferences</button></div></form>`);
+    const s = P.sleepForDate(state, selectedDate);
+    const selected = dayIndex(selectedDate);
+    const weekdays = DAYS.map((day,index) => `<label><input type="checkbox" name="sleepDays" value="${index}" aria-label="${day}" ${index===selected?'checked':''}><span>${day.slice(0,3)}</span></label>`).join('');
+    const bed=s.bed,wake=s.wakeLatest||s.wake;
+    show('Your day has a rhythm.',`<form id="planner-sleep-form"><p>Choose the days these sleep preferences apply to.</p><fieldset class="sleep-days"><legend>Apply to</legend><div class="sleep-weekdays">${weekdays}</div></fieldset><div class="form-grid">${renderTimePicker({label:'Wake-up time',value:wake,name:'wake'})}${renderTimePicker({label:'Bedtime',value:bed,name:'bed'})}</div><p class="sleep-duration-counter" role="status">Sleep time <strong data-sleep-duration>${sleepDurationLabel(bed,wake)}</strong></p><p class="dialog-help">Only selected days will change. Tasks will be scheduled between the selected day’s wake-up time and bedtime, with your planning buffer protected.</p><div class="dialog-actions">${action('close','Cancel')}<button type="submit" class="btn btn-primary">Save sleep preferences</button></div></form>`,true);
+  }
+  function sleepDurationLabel(bed,wake) {
+    if(!/^\d{2}:\d{2}$/.test(bed)||!/^\d{2}:\d{2}$/.test(wake))return 'Choose both times';
+    const total=(toMinutes(wake)-toMinutes(bed)+1440)%1440;
+    const hours=Math.floor(total/60),minutes=total%60;
+    return `${hours} hr${hours===1?'':'s'}${minutes?` ${minutes} min`:''}`;
   }
 
   function importForm() {
@@ -347,6 +356,11 @@ export function mountPlanner(container, {legacy, startImport = false, onImportCl
   }
   async function onInput(event) {
     try {
+      const sleepForm=event.target.closest('#planner-sleep-form');
+      if(sleepForm&&event.target.closest('[data-time-picker]')) {
+        const output=sleepForm.querySelector('[data-sleep-duration]');
+        output.textContent=sleepDurationLabel(sleepForm.elements.bed.value,sleepForm.elements.wake.value);
+      }
       if(event.target.id==='plan-date') { if(P.isDate(event.target.value)){selectedDate=event.target.value;render();} }
       const taskForm = event.target.closest('#planner-task-form');
       if (taskForm && event.target.name === 'split') {
@@ -510,8 +524,13 @@ export function mountPlanner(container, {legacy, startImport = false, onImportCl
         return reviewEventOnly(candidate,values,mode,scope);
       }
       if(form.id==='planner-sleep-form') {
-        let next=P.updateSleep(state,{wake:get('wake'),wakeLatest:get('wakeLatest'),bed:get('bed'),bedLatest:get('bedLatest'),minSleep:Math.round(Number(get('minSleep'))*60)});
-        if(data.has('clearOverrides'))next.sleepOverrides={};return commit(next,'Sleep preferences saved. Preview your plan to use them.');
+        const selectedDays=data.getAll('sleepDays').map(Number);
+        if(!selectedDays.length)throw new Error('Choose at least one day for these sleep preferences.');
+        const sleepOverrides=clone(state.sleepOverrides);
+        const wake=get('wake'),bed=get('bed'),minSleep=(toMinutes(wake)-toMinutes(bed)+1440)%1440;
+        for(const day of selectedDays) sleepOverrides[day]={...(sleepOverrides[day]||{}),wake,wakeLatest:wake,bed,bedLatest:bed,minSleep};
+        const next=P.updateSleep(state,{sleepOverrides});
+        return commit(next,'Sleep preferences saved. Preview your plan to use them.');
       }
       if(form.id==='planner-progress-form')return commit(Number(get('remaining'))===0?P.completeTask(state,id,{date:selectedDate,nowMinutes:dateNow()}):P.updateTaskRemaining(state,id,Number(get('remaining')),{date:selectedDate}),'Progress saved.');
       if(form.id==='planner-defer-form')return commit(P.deferTask(state,id,get('until'),{date:selectedDate,nowMinutes:dateNow()}),'Task deferred.');

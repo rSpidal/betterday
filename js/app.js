@@ -2,9 +2,9 @@ import { DAYS, formatTime, generateSchedule } from './scheduler.js?v=20261103.3'
 import { mountQuestionnaire } from './questionnaire.js?v=20261103.7';
 import { blankAnswers, loadState, saveState } from './storage.js?v=20261103.3';
 import { bindTimePickers } from './time-picker.js?v=20261102.2';
-import { mountPlanner } from './planner-view.js?v=20261104.10';
+import { mountPlanner } from './planner-view.js?v=20261104.12';
 import { loadPlanner, saveRoutineReplacement } from './planner-storage.js?v=20261102';
-import { replaceRoutine, todayInZone, getEventsForDate, routineCommitments, hasWeeklyRoutine } from './planner.js?v=20261103.10';
+import { replaceRoutine, todayInZone, getEventsForDate, routineCommitments, hasWeeklyRoutine } from './planner.js?v=20261104.7';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

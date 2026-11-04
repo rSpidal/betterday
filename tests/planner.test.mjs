@@ -224,6 +224,36 @@ test('wake range uses latest wake while actual wake adjusts only that date', () 
   assert.throws(()=>updateSleep(state,{bedLatest:'23:30',minSleep:480}),/minimum sleep/);
 });
 
+test('weekday sleep ranges control auto-scheduled task times independently', () => {
+  let state=task(base());
+  state=updateSleep(state,{sleepOverrides:{
+    0:{wake:'06:00',wakeLatest:'06:30',bed:'22:00',bedLatest:'22:30'},
+    1:{wake:'09:00',wakeLatest:'09:30',bed:'22:00',bedLatest:'22:30'},
+  }});
+  const monday=previewReplan(state,{date:DATE,nowMinutes:0,bufferMinutes:90});
+  const tuesday=previewReplan(state,{date:addDays(DATE,1),nowMinutes:0,bufferMinutes:90});
+  assert.equal(monday.events[0].start,'08:00');
+  assert.equal(tuesday.events[0].start,'11:00');
+  assert.throws(()=>updateSleep(state,{sleepOverrides:{
+    0:{wake:'08:00',wakeLatest:'09:00',bed:'03:00',bedLatest:'04:00'},
+  }}),/minimum sleep/);
+});
+
+test('changing one weekday sleep preference leaves other weekdays unchanged', () => {
+  const state=updateSleep(base(),{sleepOverrides:{
+    0:{wake:'06:00',wakeLatest:'06:00',bed:'22:00',bedLatest:'22:00'},
+    1:{wake:'09:00',wakeLatest:'09:00',bed:'22:00',bedLatest:'22:00'},
+  }});
+  const updated=updateSleep(state,{sleepOverrides:{
+    ...state.sleepOverrides,
+    0:{wake:'07:00',wakeLatest:'07:00',bed:'23:00',bedLatest:'23:00'},
+  }});
+  const monday=previewReplan(task(updated),{date:DATE,nowMinutes:0,bufferMinutes:0});
+  const tuesday=previewReplan(task(updated),{date:addDays(DATE,1),nowMinutes:0,bufferMinutes:0});
+  assert.equal(monday.events[0].start,'07:00');
+  assert.equal(tuesday.events[0].start,'09:00');
+});
+
 test('waking after the usual bedtime does not open a misleading overnight work window', () => {
   const state=setWakeTime(task(base()),DATE,'23:30');
   assert.equal(replan(state,{nowMinutes:1410}).events.length,0);
