@@ -2,7 +2,7 @@ import * as P from './planner.js?v=20261104.5';
 import { getCommitmentDetails, saveWeeklyCommitment, deleteCommitmentGroup, firstCommitmentDate } from './commitments.js?v=20261103.10';
 import { loadPlanner, savePlanner, saveMigratedPlanner, importPlannerBackup } from './planner-storage.js?v=20261102';
 import { formatTime, toMinutes, DAYS } from './scheduler.js';
-import { renderTimePicker } from './time-picker.js?v=20261102.2';
+import { renderTimePicker } from './time-picker.js?v=20261104.1';
 import { exportCalendar } from './calendar-exchange.js?v=20261102';
 import { prepareCalendarImport } from './calendar-import.js?v=20261103.11';
 
@@ -182,7 +182,7 @@ export function mountPlanner(container, {legacy, startImport = false, onImportCl
       <legend data-time-heading>Time ${index + 1}</legend>
       <div class="commitment-time-actions">${action('commitment-time-remove','Remove time','','text-button')}</div>
       <fieldset class="day-fieldset" data-event-weekdays><legend>Repeat on</legend><div class="commitment-weekdays">${DAYS.map((day,i)=>`<label><input type="checkbox" name="weekdays" value="${i}" aria-label="${day}" ${slot.days.includes(i)?'checked':''}><span>${day.slice(0,3)}</span></label>`).join('')}</div></fieldset>
-      <div class="form-grid">${renderTimePicker({label:'Starts',value:slot.start||'',name:'start',pair,endpoint:'start'})}${renderTimePicker({label:'Ends',value:slot.end||'',name:'end',pair,endpoint:'end',endOfDay:true})}</div>
+      <div class="form-grid">${renderTimePicker({label:'Starts',value:slot.start||'',name:'start',pair,endpoint:'start',defaultHour:'12'})}${renderTimePicker({label:'Ends',value:slot.end||'',name:'end',pair,endpoint:'end',endOfDay:true,defaultHour:'12'})}</div>
     </fieldset>`;
   }
   function eventForm(id, date = selectedDate) {
@@ -198,7 +198,7 @@ export function mountPlanner(container, {legacy, startImport = false, onImportCl
       ${event?.recurrence?select('Apply change to','scope','this',[['this','Only this date'],['all','The whole commitment']]):''}
       <div class="form-grid">${field(event ? 'Date' : 'Start on or after','date',date,'date','required')}${select('Repeat','repeat',repeat,[['none','Does not repeat'],['daily','Every day'],['weekly','Every week']])}</div>
       <p class="field-hint" data-event-repeat-note hidden>To edit the weekly days and times together, choose “The whole commitment.”</p>
-      ${event?.recurrence?`<fieldset class="commitment-occurrence" data-event-occurrence><legend class="sr-only">Time for this date</legend><div class="form-grid">${renderTimePicker({label:'Starts',value:event.start,name:'occurrenceStart',pair:'commitment-occurrence',endpoint:'start'})}${renderTimePicker({label:'Ends',value:event.end,name:'occurrenceEnd',pair:'commitment-occurrence',endpoint:'end',endOfDay:true})}</div></fieldset>`:''}
+      ${event?.recurrence?`<fieldset class="commitment-occurrence" data-event-occurrence><legend class="sr-only">Time for this date</legend><div class="form-grid">${renderTimePicker({label:'Starts',value:event.start,name:'occurrenceStart',pair:'commitment-occurrence',endpoint:'start',defaultHour:'12'})}${renderTimePicker({label:'Ends',value:event.end,name:'occurrenceEnd',pair:'commitment-occurrence',endpoint:'end',endOfDay:true,defaultHour:'12'})}</div></fieldset>`:''}
       <fieldset class="commitment-times" data-event-times><legend class="sr-only">Commitment times</legend><p class="field-hint" data-weekly-help>Select the days that share a time. Add another time when a day starts or ends differently.</p><div data-commitment-rows>${slots.map(commitmentTimeRow).join('')}</div>${action('commitment-time-add','+ Add another day and time','','btn btn-secondary')}</fieldset>
       ${event?.kind==='session'?`<label class="checkbox-label"><input name="locked" type="checkbox" ${event.locked?'checked':''}>Keep this work session at its chosen time</label>`:''}
       ${select('If this overlaps other events','conflict','move',[['move','Preview moving tasks on this date'],['reject','Keep other events fixed; show a conflict'],['allow','Keep both and show the overlap'],['replace','Replace a selected event']])}

@@ -45,8 +45,9 @@ export function suggestEndTime(start, duration = 60) {
  * Pair controls with the same pair and endpoint=start/end for optional smart end times.
  * Set automatic=false for an existing or manually chosen end.
  */
-export function renderTimePicker({ label, value = '', name = '', attributes = '', endOfDay = false, pair = '', endpoint = '', automatic = !value, required = true, draftParts = null } = {}) {
+export function renderTimePicker({ label, value = '', name = '', attributes = '', endOfDay = false, pair = '', endpoint = '', automatic = !value, required = true, draftParts = null, defaultHour = '' } = {}) {
   const parts = timeParts(value).hour ? timeParts(value) : normalizeDraftParts(draftParts);
+  if (!parts.hour && defaultHour) parts.hour = String(defaultHour);
   const canonical = canonicalTime(parts, endOfDay);
   const key = `time-picker-${++nextPicker}`;
   return `<fieldset class="field time-picker" data-time-picker data-time-minute="${parts.minute}" data-time-pair="${escape(pair)}" data-time-endpoint="${escape(endpoint)}" data-time-automatic="${automatic ? 'true' : 'false'}" data-time-end-of-day="${endOfDay ? 'true' : 'false'}">
